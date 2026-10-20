@@ -1,0 +1,65 @@
+.App {
+  background-color: aliceblue;
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+}
+
+.left-painel {
+  width: 20%;
+  border: 1px solid orangered;
+  background-color: #fff;
+}
+
+.center-painel {
+  width: 50%;
+  border: 1px solid orangered;
+}
+
+.rigth-painel {
+  width: 30%;
+  border: 1px solid orangered;
+  background-color: #fff;
+}
+
+.map-bar {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  box-sizing: border-box;
+  background-color: black;
+}
+
+.map-bar button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.map-bar button[aria-pressed='true'] {
+  background-color: orangered;
+  color: white;
+}
+
+.item-list {
+  padding: 16px;
+}
+
+.item-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.item-list li {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.item-list p {
+  margin: 8px 0 0;
+}
