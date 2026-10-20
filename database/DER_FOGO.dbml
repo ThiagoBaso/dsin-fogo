@@ -1,0 +1,240 @@
+// F.O.G.O. — Modelo lógico de dados
+// Importe este arquivo em https://dbdiagram.io
+// Regra: equipamentos e agentes podem ter GPS atualizado por seus respectivos históricos.
+
+Table orgaos {
+  id_orgao int [pk, increment]
+  nome varchar(150) [not null]
+  sigla varchar(25)
+  esfera varchar(30)
+}
+
+Table regioes {
+  id_regiao int [pk, increment]
+  nome varchar(100) [not null, unique]
+  descricao text
+}
+
+Table bairros {
+  id_bairro int [pk, increment]
+  id_regiao int [not null]
+  nome varchar(120) [not null]
+  indexes {
+    (id_regiao, nome) [unique]
+  }
+}
+
+Table localizacoes {
+  id_localizacao int [pk, increment]
+  id_bairro int [not null]
+  cep char(8)
+  cidade varchar(100) [not null]
+  uf char(2) [not null]
+  logradouro varchar(180)
+  referencia varchar(255)
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+}
+
+Table tipos_equipamento {
+  id_tipo int [pk, increment]
+  nome varchar(100) [not null, unique]
+  mobilidade varchar(10) [not null, note: 'fixo ou movel']
+  icone_mapa varchar(80)
+}
+
+Table situacoes_equipamento {
+  id_situacao int [pk, increment]
+  nome varchar(80) [not null, unique]
+  disponivel boolean [not null, note: 'Verdadeiro somente quando conta como operacional']
+}
+
+Table equipamentos {
+  id_equipamento int [pk, increment]
+  id_tipo int [not null]
+  id_orgao int [not null]
+  id_localizacao int [note: 'Local de instalacao ou base; nulo se desconhecido']
+  id_situacao int [not null]
+  numero_serie varchar(120) [not null, unique]
+  marca varchar(100) [not null]
+  modelo varchar(100) [not null]
+  cadastrado_em datetime [not null]
+  instalado_em datetime
+  indexes {
+    (id_tipo, id_situacao)
+    (id_orgao, id_situacao)
+  }
+}
+
+Table atributos_tipo {
+  id_atributo int [pk, increment]
+  id_tipo int [not null]
+  nome varchar(100) [not null]
+  tipo_valor varchar(12) [not null, note: 'texto, numero ou booleano']
+  unidade varchar(30)
+  obrigatorio boolean [not null]
+  indexes {
+    (id_tipo, nome) [unique]
+  }
+}
+
+Table valores_atributo {
+  id_equipamento int [not null]
+  id_atributo int [not null]
+  valor_texto varchar(255)
+  valor_numero decimal(14,4)
+  valor_booleano boolean
+  indexes {
+    (id_equipamento, id_atributo) [pk]
+  }
+  Note: 'Preencher somente a coluna de valor correspondente ao tipo definido em atributos_tipo. Validar se atributo pertence ao tipo do equipamento.'
+}
+
+Table historico_situacoes {
+  id_historico int [pk, increment]
+  id_equipamento int [not null]
+  id_situacao int [not null]
+  iniciado_em datetime [not null]
+  encerrado_em datetime
+  observacao text
+  indexes {
+    (id_equipamento, iniciado_em)
+  }
+}
+
+Table manutencoes {
+  id_manutencao int [pk, increment]
+  id_equipamento int [not null]
+  modalidade varchar(20) [not null, note: 'preventiva ou corretiva']
+  prioridade varchar(20) [not null, note: 'imediata ou agendada']
+  status varchar(30) [not null, note: 'pendente, agendada, em_execucao, concluida, cancelada']
+  descricao text
+  aberta_em datetime [not null]
+  prevista_para datetime
+  iniciada_em datetime
+  concluida_em datetime
+  indexes {
+    (id_equipamento, status, prevista_para)
+  }
+}
+
+Table agentes {
+  id_agente int [pk, increment]
+  id_orgao int [not null]
+  id_localizacao_base int
+  matricula varchar(60) [not null]
+  nome varchar(150) [not null]
+  cargo varchar(100) [not null, note: 'agente de transito, guarda municipal, policial etc.']
+  ativo_cadastro boolean [not null]
+  indexes {
+    (id_orgao, matricula) [unique]
+  }
+}
+
+Table turnos_agente {
+  id_turno int [pk, increment]
+  id_agente int [not null]
+  id_regiao int [not null]
+  inicio_previsto datetime [not null]
+  fim_previsto datetime [not null]
+  inicio_real datetime
+  fim_real datetime
+  status varchar(25) [not null, note: 'programado, em_atividade, encerrado']
+  indexes {
+    (id_agente, inicio_previsto)
+    (id_regiao, inicio_previsto)
+  }
+}
+
+Table posicoes_equipamento {
+  id_posicao int [pk, increment]
+  id_equipamento int [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  registrado_em datetime [not null]
+  indexes {
+    (id_equipamento, registrado_em)
+  }
+}
+
+Table posicoes_agente {
+  id_posicao int [pk, increment]
+  id_agente int [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  registrado_em datetime [not null]
+  indexes {
+    (id_agente, registrado_em)
+  }
+}
+
+Table ocorrencias {
+  id_ocorrencia int [pk, increment]
+  id_localizacao int [not null]
+  id_orgao int [not null]
+  id_equipamento int [note: 'Equipamento que identificou a ocorrencia, se aplicavel']
+  tipo varchar(100) [not null]
+  gravidade varchar(20) [not null]
+  status varchar(25) [not null]
+  descricao text
+  ocorrida_em datetime [not null]
+  indexes {
+    (id_localizacao, ocorrida_em)
+    (ocorrida_em, tipo)
+  }
+}
+
+Table alertas {
+  id_alerta int [pk, increment]
+  id_equipamento int
+  id_agente int
+  id_ocorrencia int
+  id_regiao int
+  categoria varchar(80) [not null]
+  severidade varchar(20) [not null]
+  mensagem text [not null]
+  criado_em datetime [not null]
+  resolvido_em datetime
+  Note: 'Ao menos um dos quatro alvos deve estar preenchido. Ex.: alerta de manutencao sobre equipamento ou alerta territorial sobre regiao.'
+}
+
+Table previsoes_risco {
+  id_previsao int [pk, increment]
+  id_regiao int [not null]
+  janela_inicio datetime [not null]
+  janela_fim datetime [not null]
+  indice_risco decimal(5,2) [not null, note: 'Escala de 0 a 100']
+  nivel_risco varchar(20) [not null]
+  metodo varchar(100) [not null]
+  gerada_em datetime [not null]
+  indexes {
+    (id_regiao, janela_inicio, janela_fim)
+  }
+}
+
+Ref: bairros.id_regiao > regioes.id_regiao
+Ref: localizacoes.id_bairro > bairros.id_bairro
+Ref: equipamentos.id_tipo > tipos_equipamento.id_tipo
+Ref: equipamentos.id_orgao > orgaos.id_orgao
+Ref: equipamentos.id_localizacao > localizacoes.id_localizacao
+Ref: equipamentos.id_situacao > situacoes_equipamento.id_situacao
+Ref: atributos_tipo.id_tipo > tipos_equipamento.id_tipo
+Ref: valores_atributo.id_equipamento > equipamentos.id_equipamento
+Ref: valores_atributo.id_atributo > atributos_tipo.id_atributo
+Ref: historico_situacoes.id_equipamento > equipamentos.id_equipamento
+Ref: historico_situacoes.id_situacao > situacoes_equipamento.id_situacao
+Ref: manutencoes.id_equipamento > equipamentos.id_equipamento
+Ref: agentes.id_orgao > orgaos.id_orgao
+Ref: agentes.id_localizacao_base > localizacoes.id_localizacao
+Ref: turnos_agente.id_agente > agentes.id_agente
+Ref: turnos_agente.id_regiao > regioes.id_regiao
+Ref: posicoes_equipamento.id_equipamento > equipamentos.id_equipamento
+Ref: posicoes_agente.id_agente > agentes.id_agente
+Ref: ocorrencias.id_localizacao > localizacoes.id_localizacao
+Ref: ocorrencias.id_orgao > orgaos.id_orgao
+Ref: ocorrencias.id_equipamento > equipamentos.id_equipamento
+Ref: alertas.id_equipamento > equipamentos.id_equipamento
+Ref: alertas.id_agente > agentes.id_agente
+Ref: alertas.id_ocorrencia > ocorrencias.id_ocorrencia
+Ref: alertas.id_regiao > regioes.id_regiao
+Ref: previsoes_risco.id_regiao > regioes.id_regiao

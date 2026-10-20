@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+/front/node_modules
+/front/.npm-cache
+/front/build
 /.pnp
 .pnp.js
 
@@ -21,3 +24,12 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# F.O.G.O. generated local demo data
+.venv/
+cache/
+database/marilia.graphml
+__pycache__/
+*.py[cod]
+.env
+

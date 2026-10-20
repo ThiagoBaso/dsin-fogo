@@ -1,0 +1,9 @@
+.git/
+.venv/
+cache/
+front/node_modules/
+front/build/
+database/*.graphml
+database/seed.sql
+**/__pycache__/
+**/*.py[cod]

@@ -43,6 +43,18 @@
   color: white;
 }
 
+.api-message {
+  margin: 0;
+  padding: 10px 16px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.api-error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .item-list {
   padding: 16px;
 }
