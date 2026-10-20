@@ -1,4 +1,5 @@
 import { Ponto } from '../types';
+import { equipmentSituations } from '../equipmentCatalog';
 
 function ItemList({ pontos }: { pontos: Ponto[] }) {
   return (
@@ -8,7 +9,7 @@ function ItemList({ pontos }: { pontos: Ponto[] }) {
         {pontos.map((ponto) => (
           <li key={ponto.id}>
             <strong>{ponto.nome}</strong>
-            <p>Status: {ponto.status}</p>
+            <p>Situação: {equipmentSituations[ponto.situacao_id]?.label || ponto.situacao}</p>
             <p>Coordenadas: {ponto.latitude}, {ponto.longitude}</p>
           </li>
         ))}

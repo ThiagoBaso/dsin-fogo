@@ -54,6 +54,10 @@ def list_equipamentos():
         """
         SELECT e.id_equipamento AS id,
                CONCAT(t.nome, ' ', e.numero_serie) AS nome,
+               t.id_tipo AS tipo_id,
+               t.nome AS tipo,
+               s.id_situacao AS situacao_id,
+               s.nome AS situacao,
                CAST(COALESCE(pos.latitude, l.latitude) AS DOUBLE) AS latitude,
                CAST(COALESCE(pos.longitude, l.longitude) AS DOUBLE) AS longitude,
                CASE WHEN s.disponivel = 1 THEN 'ativo' ELSE 'inativo' END AS status

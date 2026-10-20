@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
-  CircleMarker,
+  Marker,
   Popup,
   useMap,
 } from "react-leaflet";
+import L from "leaflet";
+import { equipmentIcons, equipmentSituations } from "../equipmentCatalog";
 import "leaflet/dist/leaflet.css";
+import "./Map.css";
 
 const ponto_inicial = [-22.217, -49.950];
 
@@ -19,6 +22,26 @@ function AjustarTamanhoMapa({ ativo }) {
   }, [ativo, map]);
 
   return null;
+}
+
+const marcadores = new Map();
+
+function criarIcone(ponto) {
+  const arquivoIcone = equipmentIcons[ponto.tipo_id] || 'car';
+  const situacao = equipmentSituations[ponto.situacao_id] || {
+    label: 'Situação desconhecida', symbol: '?', className: 'indisponivel',
+  };
+  const chave = `${arquivoIcone}-${ponto.situacao_id}`;
+  if (!marcadores.has(chave)) {
+    marcadores.set(chave, L.divIcon({
+      className: 'equipment-div-icon',
+      html: `<span class="equipment-marker situation-${situacao.className}" title="${situacao.label}"><img src="/icons/${arquivoIcone}.svg" alt=""/><span class="equipment-state">${situacao.symbol}</span></span>`,
+      iconSize: [42, 46],
+      iconAnchor: [21, 23],
+      popupAnchor: [0, -20],
+    }));
+  }
+  return marcadores.get(chave);
 }
 
 export default function MapaMarilia({ pontos, ativo }) {
@@ -38,35 +61,26 @@ export default function MapaMarilia({ pontos, ativo }) {
         />
 
         {pontos.map((ponto) => (
-          <CircleMarker
+          <Marker
             key={ponto.id}
-            center={[ponto.latitude, ponto.longitude]}
-            radius={9}
-            pathOptions={{
-              color: "#ffffff",
-              weight: 2,
-              fillColor:
-                ponto.status === "ativo"
-                  ? "#22c55e"
-                  : "#ef4444",
-              fillOpacity: 1,
-            }}
+            position={[ponto.latitude, ponto.longitude]}
+            icon={criarIcone(ponto)}
             eventHandlers={{
               click: () => setSelecionado(ponto),
             }}
           >
             <Popup>
               <strong>{ponto.nome}</strong>
-              <p>Status: {ponto.status}</p>
+              <p>Situação: {equipmentSituations[ponto.situacao_id]?.label || ponto.situacao}</p>
             </Popup>
-          </CircleMarker>
+          </Marker>
         ))}
       </MapContainer>
 
       {selecionado && (
         <section>
           <h3>{selecionado.nome}</h3>
-          <p>Status: {selecionado.status}</p>
+          <p>Situação: {equipmentSituations[selecionado.situacao_id]?.label || selecionado.situacao}</p>
           <p>
             Coordenadas: {selecionado.latitude},
             {" "}{selecionado.longitude}
