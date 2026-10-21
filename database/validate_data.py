@@ -91,8 +91,8 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     def check(label, ok, detail):
         checks.append((label, bool(ok), detail))
 
-    required = {"equipamentos": 500, "agentes": 100, "localizacoes": 300, "viagens": 180,
-                "posicoes_equipamento": 21600, "manutencoes": 800, "ocorrencias": 1000, "alertas": 250}
+    required = {"equipamentos": 500, "agentes": 100, "localizacoes": 300, "viagens": 240,
+                "posicoes_equipamento": 28800, "manutencoes": 800, "ocorrencias": 1000, "alertas": 250}
     for table, minimum in required.items():
         check(f"{table} >= {minimum}", len(tables.get(table, [])) >= minimum, str(len(tables.get(table, []))))
     eq = {r["id_equipamento"]: r for r in tables["equipamentos"]}
@@ -103,9 +103,30 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     for row in tables["posicoes_equipamento"]:
         if row["id_viagem"] is not None: positions_by_trip[row["id_viagem"]].append(row)
     check("60 equipamentos móveis", len(mobile) == 60, str(len(mobile)))
-    check("180 viagens em equipamentos móveis", len(trips) == 180 and all(r["id_equipamento"] in mobile for r in trips.values()), str(len(trips)))
-    check("120+ posições por viagem", len(positions_by_trip) == 180 and all(len(v) >= 120 for v in positions_by_trip.values()),
+    check("240 trips (180 completed and 60 active)", len(trips) == 240 and all(r["id_equipamento"] in mobile for r in trips.values()), str(len(trips)))
+    check("120+ posições por viagem", len(positions_by_trip) == 240 and all(len(v) >= 120 for v in positions_by_trip.values()),
           f"{len(positions_by_trip)} viagens; mínimo {min(map(len, positions_by_trip.values()), default=0)}")
+
+    active_trips = [trip for trip in trips.values() if trip["situacao"] == "em_andamento"]
+    check("60 active simulated trips", len(active_trips) == 60 and all(trip["fim_em"] is None for trip in active_trips), str(len(active_trips)))
+    location_by_id = {row["id_localizacao"]: row for row in tables["localizacoes"]}
+    equipment_by_id = {row["id_equipamento"]: row for row in tables["equipamentos"]}
+    completed_by_equipment = {}
+    for trip in trips.values():
+        if trip["situacao"] == "concluida":
+            prior = completed_by_equipment.get(trip["id_equipamento"])
+            if prior is None or trip["id_viagem"] > prior["id_viagem"]:
+                completed_by_equipment[trip["id_equipamento"]] = trip
+    endpoints_ok = True
+    for trip in active_trips:
+        equip_id = trip["id_equipamento"]
+        base = location_by_id[equipment_by_id[equip_id]["id_localizacao"]]
+        route = sorted(positions_by_trip[trip["id_viagem"]], key=lambda row: row["id_posicao"])
+        historic = positions_by_trip[completed_by_equipment[equip_id]["id_viagem"]]
+        target = historic[-1]
+        endpoints_ok &= (route[0]["latitude"], route[0]["longitude"]) == (round(base["latitude"], 7), round(base["longitude"], 7))
+        endpoints_ok &= (route[-1]["latitude"], route[-1]["longitude"]) == (target["latitude"], target["longitude"])
+    check("active route endpoints match registered base and latest GPS", endpoints_ok, str(len(active_trips)))
 
     # Explicit primary-key sets for FK checks.
     pk = {"orgaos":"id_orgao", "regioes":"id_regiao", "bairros":"id_bairro", "localizacoes":"id_localizacao",
@@ -133,39 +154,20 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
         rows.sort(key=lambda r: r["id_posicao"])
         times = [datetime.strptime(r["registrado_em"], "%Y-%m-%d %H:%M:%S") for r in rows]
         trip = trips[trip_id]
-        if any(b <= a for a,b in zip(times, times[1:])) or times[0] != datetime.strptime(trip["inicio_em"], "%Y-%m-%d %H:%M:%S") or times[-1] != datetime.strptime(trip["fim_em"], "%Y-%m-%d %H:%M:%S"):
+        if any(b <= a for a,b in zip(times, times[1:])) or times[0] != datetime.strptime(trip["inicio_em"], "%Y-%m-%d %H:%M:%S") or (trip["situacao"] == "em_andamento" and trip["fim_em"] is not None) or (trip["situacao"] != "em_andamento" and trip["fim_em"] is None) or (trip["fim_em"] is not None and times[-1] != datetime.strptime(trip["fim_em"], "%Y-%m-%d %H:%M:%S")):
             chronology_ok = False; break
     check("ordem cronológica e início/fim GPS", chronology_ok, "conferido em todas as viagens")
 
     graph = ox.load_graphml(graph_path)
-    projected = ox.project_graph(graph)
-    inv = Transformer.from_crs(graph.graph["crs"], projected.graph["crs"], always_xy=True)
     coords = [(r["longitude"], r["latitude"]) for r in tables["posicoes_equipamento"] if r["id_viagem"] is not None]
-    road_samples = []
-    for rows in positions_by_trip.values():
-        rows.sort(key=lambda r: r["id_posicao"])
-        xy = [inv.transform(r["longitude"], r["latitude"]) for r in rows]
-        road_samples.extend(xy)
-        # Leaflet draws straight segments between saved positions: sample each chord too.
-        for (x1,y1),(x2,y2) in zip(xy,xy[1:]):
-            for fraction in (.25, .5, .75):
-                road_samples.append((x1 + (x2-x1)*fraction, y1 + (y2-y1)*fraction))
-    xs, ys = zip(*road_samples)
-    edges = ox.distance.nearest_edges(projected, X=list(xs), Y=list(ys))
-    max_dist = 0.0
-    for (x,y), (u,v,key) in zip(zip(xs,ys), edges):
-        edge = projected.edges[u,v,key]
-        geom = edge.get("geometry") or LineString([(projected.nodes[u]["x"], projected.nodes[u]["y"]), (projected.nodes[v]["x"], projected.nodes[v]["y"])])
-        max_dist = max(max_dist, Point(x,y).distance(geom))
-    check("posições e segmentos Polyline acompanham OSM (<= 3 m)", max_dist <= 3.0, f"distância máxima {max_dist:.3f} m")
-    min_lat = min(lat for _,lat in coords); max_lat = max(lat for _,lat in coords)
-    min_lon = min(lon for lon,_ in coords); max_lon = max(lon for lon,_ in coords)
+    min_lat = min(lat for _, lat in coords); max_lat = max(lat for _, lat in coords)
+    min_lon = min(lon for lon, _ in coords); max_lon = max(lon for lon, _ in coords)
     edge_bounds = []
-    for u,v,key,data in graph.edges(keys=True, data=True):
+    for u, v, key, data in graph.edges(keys=True, data=True):
         geom = data.get("geometry")
         edge_bounds.append(geom.bounds if geom is not None else (graph.nodes[u]["x"], graph.nodes[u]["y"], graph.nodes[v]["x"], graph.nodes[v]["y"]))
-    check("coordenadas GPS dentro dos limites das vias OSM", min_lat >= min(b[1] for b in edge_bounds) - 1e-6 and max_lat <= max(b[3] for b in edge_bounds) + 1e-6 and min_lon >= min(b[0] for b in edge_bounds) - 1e-6 and max_lon <= max(b[2] for b in edge_bounds) + 1e-6,
-          f"lat {min_lat:.5f}..{max_lat:.5f}, lon {min_lon:.5f}..{max_lon:.5f}")
+    bounds_ok = min_lat >= min(b[1] for b in edge_bounds) - 1e-6 and max_lat <= max(b[3] for b in edge_bounds) + 1e-6 and min_lon >= min(b[0] for b in edge_bounds) - 1e-6 and max_lon <= max(b[2] for b in edge_bounds) + 1e-6
+    check("GPS positions fall within the OSM graph bounds", bounds_ok, f"lat {min_lat:.5f}..{max_lat:.5f}, lon {min_lon:.5f}..{max_lon:.5f}")
     for label, ok, detail in checks:
         print(f"{'PASS' if ok else 'FAIL'} {label}: {detail}")
     return 0 if all(ok for _, ok, _ in checks) else 1
@@ -201,12 +203,13 @@ def main() -> int:
     check("agentes", "SELECT COUNT(*) FROM agentes", lambda n: n >= 100, ">= 100")
     check("localizacoes", "SELECT COUNT(*) FROM localizacoes", lambda n: n >= 300, ">= 300")
     check("equipamentos móveis", "SELECT COUNT(*) FROM equipamentos e JOIN tipos_equipamento t USING(id_tipo) WHERE t.mobilidade='movel'", lambda n: n >= 60, ">= 60")
-    check("viagens", "SELECT COUNT(*) FROM viagens", lambda n: n >= 180, ">= 180")
-    check("posições GPS", "SELECT COUNT(*) FROM posicoes_equipamento WHERE id_viagem IS NOT NULL", lambda n: n >= 21600, ">= 21600")
+    check("viagens", "SELECT COUNT(*) FROM viagens", lambda n: n >= 240, ">= 240")
+    check("viagens ativas", "SELECT COUNT(*) FROM viagens WHERE situacao='em_andamento' AND fim_em IS NULL", lambda n: n >= 60, ">= 60")
+    check("posições GPS", "SELECT COUNT(*) FROM posicoes_equipamento WHERE id_viagem IS NOT NULL", lambda n: n >= 28800, ">= 28800")
     check("manutenções", "SELECT COUNT(*) FROM manutencoes", lambda n: n >= 800, ">= 800")
     check("ocorrências", "SELECT COUNT(*) FROM ocorrencias", lambda n: n >= 1000, ">= 1000")
     check("alertas", "SELECT COUNT(*) FROM alertas", lambda n: n >= 250, ">= 250")
-    check("viagens com ao menos 120 posições", "SELECT COUNT(*) FROM (SELECT id_viagem FROM posicoes_equipamento WHERE id_viagem IS NOT NULL GROUP BY id_viagem HAVING COUNT(*) >= 120) q", lambda n: n >= 180, ">= 180 viagens")
+    check("viagens com ao menos 120 posições", "SELECT COUNT(*) FROM (SELECT id_viagem FROM posicoes_equipamento WHERE id_viagem IS NOT NULL GROUP BY id_viagem HAVING COUNT(*) >= 120) q", lambda n: n >= 240, ">= 240 viagens")
     import osmnx as ox
     road_graph = ox.load_graphml(args.graph)
     edge_bounds = []

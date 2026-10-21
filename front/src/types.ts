@@ -24,6 +24,23 @@ export interface Ponto {
   status: 'ativo' | 'inativo';
 }
 
+export interface RotaPosicao {
+  latitude: number;
+  longitude: number;
+  registrado_em: string;
+}
+
+export interface RotaVeiculo {
+  id: number;
+  id_equipamento: number;
+  numero_serie: string;
+  inicio_em: string;
+  fim_em: string | null;
+  distancia_m: number;
+  situacao: 'em_andamento' | 'concluida' | 'interrompida';
+  posicoes: RotaPosicao[];
+}
+
 export interface AtributoEquipamento {
   id: number;
   nome: string;

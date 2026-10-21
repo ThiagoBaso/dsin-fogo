@@ -160,12 +160,16 @@ CREATE TABLE IF NOT EXISTS viagens (
   id_viagem INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_equipamento INT UNSIGNED NOT NULL,
   inicio_em DATETIME NOT NULL,
-  fim_em DATETIME NOT NULL,
+  fim_em DATETIME,
   distancia_m DECIMAL(12,2) NOT NULL,
-  situacao ENUM('concluida','interrompida') NOT NULL DEFAULT 'concluida',
+  situacao ENUM('em_andamento','concluida','interrompida') NOT NULL DEFAULT 'concluida',
   KEY ix_viagem_equip_inicio (id_equipamento, inicio_em),
+  KEY ix_viagem_equip_situacao_inicio (id_equipamento, situacao, inicio_em),
   CONSTRAINT fk_viagem_equip FOREIGN KEY (id_equipamento) REFERENCES equipamentos(id_equipamento),
-  CONSTRAINT chk_viagem_periodo CHECK (fim_em > inicio_em),
+  CONSTRAINT chk_viagem_periodo CHECK (
+    (situacao = 'em_andamento' AND fim_em IS NULL)
+    OR (situacao <> 'em_andamento' AND fim_em IS NOT NULL AND fim_em > inicio_em)
+  ),
   CONSTRAINT chk_viagem_dist CHECK (distancia_m >= 0)
 ) ENGINE=InnoDB;
 
@@ -179,6 +183,7 @@ CREATE TABLE IF NOT EXISTS posicoes_equipamento (
   registrado_em DATETIME NOT NULL,
   KEY ix_pos_equip_tempo (id_equipamento, registrado_em),
   KEY ix_pos_viagem_tempo (id_viagem, registrado_em),
+  UNIQUE KEY uq_pos_viagem_tempo (id_viagem, registrado_em),
   CONSTRAINT fk_pos_equip FOREIGN KEY (id_equipamento) REFERENCES equipamentos(id_equipamento),
   CONSTRAINT fk_pos_viagem FOREIGN KEY (id_viagem) REFERENCES viagens(id_viagem),
   CONSTRAINT chk_pos_lat CHECK (latitude BETWEEN -90 AND 90),

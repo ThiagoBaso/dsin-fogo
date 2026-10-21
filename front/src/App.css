@@ -602,6 +602,42 @@
   padding: 0;
 }
 
+.item-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.item-list-header h2 {
+  margin: 0;
+}
+
+.item-list-header button {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--dsin-charcoal);
+  border-radius: 7px;
+  background: var(--dsin-charcoal);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.item-list-header button:hover:not(:disabled) {
+  border-color: var(--dsin-yellow);
+  background: var(--dsin-yellow);
+  color: var(--dsin-ink);
+}
+
+.item-list-header button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .item-list li {
   padding: 0;
   overflow: hidden;

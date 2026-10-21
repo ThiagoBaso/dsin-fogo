@@ -4,7 +4,7 @@ import Map from './components/Map';
 import TopBarMap from './components/TopBarMap';
 import ItemList from './components/ItemList';
 import EquipmentDetails from './components/EquipmentDetails';
-import { Aba, Ponto } from './types';
+import { Aba, Ponto, RotaVeiculo } from './types';
 import { equipmentSituations, equipmentTypes } from './equipmentCatalog';
 
 const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, situation]) => ({
@@ -77,6 +77,7 @@ function CheckboxFilterGroup({
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
   const [pontos, setPontos] = useState<Ponto[]>([]);
+  const [rotas, setRotas] = useState<RotaVeiculo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [tiposSelecionados, setTiposSelecionados] = useState<number[]>([1]);
@@ -150,6 +151,14 @@ function App() {
     painelDetalhes.current?.scrollTo({ top: 0 });
   }
 
+  function selecionarNoMapa(ponto: Ponto) {
+    visualizarEquipamento(ponto);
+    setSelecionadosIds((selecionados) => {
+      if (!permitirMultisselecao) return [ponto.id];
+      return selecionados.includes(ponto.id) ? selecionados : [...selecionados, ponto.id];
+    });
+  }
+
   function alternarSelecao(pontoId: number) {
     setSelecionadosIds((selecionados) => {
       if (selecionados.includes(pontoId)) {
@@ -214,6 +223,35 @@ function App() {
 
     return () => controller.abort();
   }, [dataHoraAplicada]);
+
+  useEffect(() => {
+    const idsMoveisSelecionados = selecionadosIds.filter((id) =>
+      pontos.some((ponto) => ponto.id === id && ponto.mobilidade === 'movel'),
+    );
+    if (idsMoveisSelecionados.length === 0) {
+      setRotas([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const query = new URLSearchParams();
+    idsMoveisSelecionados.forEach((id) => query.append('equipamento_ids', String(id)));
+    if (dataHoraAplicada) query.set('em', dataHoraAplicada);
+
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/viagens/rotas-ativas?${query.toString()}`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<RotaVeiculo[]>;
+      })
+      .then(setRotas)
+      .catch((error: Error) => {
+        if (error.name !== 'AbortError') setRotas([]);
+      });
+
+    return () => controller.abort();
+  }, [selecionadosIds, pontos, dataHoraAplicada]);
 
   return (
     <div className={painelExpandido ? 'App' : 'App filters-collapsed'}>
@@ -380,7 +418,7 @@ function App() {
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
-          <Map pontos={pontosMapa} ativo={abaAtiva === 'mapa'} onSelecionar={visualizarEquipamento} />
+          <Map pontos={pontosMapa} rotas={rotas} ativo={abaAtiva === 'mapa'} onSelecionar={selecionarNoMapa} />
         </div>
         {abaAtiva === 'lista' && (
           <ItemList
@@ -389,6 +427,14 @@ function App() {
             detalhesId={detalhesId}
             onVisualizar={visualizarEquipamento}
             onAlternarSelecao={alternarSelecao}
+            onAlternarTodos={(selecionar) => {
+              const idsVisiveis = pontosFiltrados.map((ponto) => ponto.id);
+              setSelecionadosIds((selecionados) =>
+                selecionar
+                  ? selecionados.filter((id) => !idsVisiveis.includes(id)).concat(idsVisiveis)
+                  : selecionados.filter((id) => !idsVisiveis.includes(id)),
+              );
+            }}
           />
         )}
       </div>

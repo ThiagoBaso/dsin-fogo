@@ -252,6 +252,68 @@ def list_viagens(limit: int = Query(default=100, ge=1, le=500)):
     )
 
 
+@app.get("/api/viagens/rotas-ativas")
+def list_rotas_ativas(
+    equipamento_ids: list[int] = Query(default=[]),
+    em: datetime | None = None,
+):
+    """Return active trip paths for selected mobile equipment, optionally as of a time."""
+    ids = list(dict.fromkeys(equipamento_ids))
+    if not ids:
+        return []
+
+    placeholders = ",".join(["%s"] * len(ids))
+    params: tuple = tuple(ids)
+    as_of_clause = ""
+    if em is not None:
+        as_of_clause = " AND v.inicio_em <= %s"
+        params += (em,)
+    trips = fetch_all(
+        f"""
+        SELECT v.id_viagem AS id, v.id_equipamento, e.numero_serie,
+               v.inicio_em, v.fim_em, v.distancia_m, v.situacao
+        FROM viagens v
+        JOIN equipamentos e ON e.id_equipamento = v.id_equipamento
+        JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
+        WHERE v.situacao = 'em_andamento'
+          AND t.mobilidade = 'movel'
+          AND v.id_equipamento IN ({placeholders}){as_of_clause}
+        ORDER BY v.id_equipamento, v.inicio_em DESC
+        """,
+        params,
+    )
+    if not trips:
+        return []
+
+    trip_ids = [trip["id"] for trip in trips]
+    trip_placeholders = ",".join(["%s"] * len(trip_ids))
+    position_params: tuple = tuple(trip_ids)
+    position_as_of_clause = ""
+    if em is not None:
+        position_as_of_clause = " AND registrado_em <= %s"
+        position_params += (em,)
+    positions = fetch_all(
+        f"""
+        SELECT id_viagem, CAST(latitude AS DOUBLE) AS latitude,
+               CAST(longitude AS DOUBLE) AS longitude, registrado_em
+        FROM posicoes_equipamento
+        WHERE id_viagem IN ({trip_placeholders}){position_as_of_clause}
+        ORDER BY id_viagem, registrado_em, id_posicao
+        """,
+        position_params,
+    )
+    by_trip: dict[int, list[dict]] = {trip_id: [] for trip_id in trip_ids}
+    for position in positions:
+        by_trip[position["id_viagem"]].append({
+            "latitude": position["latitude"],
+            "longitude": position["longitude"],
+            "registrado_em": position["registrado_em"],
+        })
+    for trip in trips:
+        trip["posicoes"] = by_trip[trip["id"]]
+    return trips
+
+
 @app.get("/api/viagens/{viagem_id}/posicoes")
 def list_posicoes(viagem_id: int):
     rows = fetch_all(

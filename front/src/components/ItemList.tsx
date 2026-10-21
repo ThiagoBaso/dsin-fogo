@@ -7,16 +7,25 @@ function ItemList({
   detalhesId,
   onVisualizar,
   onAlternarSelecao,
+  onAlternarTodos,
 }: {
   pontos: Ponto[];
   selecionadosIds: number[];
   detalhesId: number | null;
   onVisualizar: (ponto: Ponto) => void;
   onAlternarSelecao: (pontoId: number) => void;
+  onAlternarTodos: (selecionar: boolean) => void;
 }) {
+  const todosSelecionados = pontos.length > 0 && pontos.every((ponto) => selecionadosIds.includes(ponto.id));
+
   return (
     <section className="item-list" aria-label="Lista de itens">
-      <h2>Itens</h2>
+      <div className="item-list-header">
+        <h2>Itens</h2>
+        <button type="button" onClick={() => onAlternarTodos(!todosSelecionados)} disabled={pontos.length === 0}>
+          {todosSelecionados ? 'Desmarcar tudo' : 'Selecionar tudo'}
+        </button>
+      </div>
       <ul>
         {pontos.map((ponto) => {
           const selecionado = selecionadosIds.includes(ponto.id);

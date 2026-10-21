@@ -146,14 +146,29 @@ Table turnos_agente {
   }
 }
 
-Table posicoes_equipamento {
-  id_posicao int [pk, increment]
+Table viagens {
+  id_viagem int [pk, increment]
   id_equipamento int [not null]
+  inicio_em datetime [not null]
+  fim_em datetime
+  distancia_m decimal(12,2) [not null]
+  situacao varchar(25) [not null, note: 'em_andamento, concluida ou interrompida']
+  indexes {
+    (id_equipamento, inicio_em)
+    (id_equipamento, situacao, inicio_em)
+  }
+}
+
+Table posicoes_equipamento {
+  id_posicao bigint [pk, increment]
+  id_equipamento int [not null]
+  id_viagem int
   latitude decimal(10,7) [not null]
   longitude decimal(10,7) [not null]
   registrado_em datetime [not null]
   indexes {
     (id_equipamento, registrado_em)
+    (id_viagem, registrado_em) [unique]
   }
 }
 
@@ -228,7 +243,9 @@ Ref: agentes.id_orgao > orgaos.id_orgao
 Ref: agentes.id_localizacao_base > localizacoes.id_localizacao
 Ref: turnos_agente.id_agente > agentes.id_agente
 Ref: turnos_agente.id_regiao > regioes.id_regiao
+Ref: viagens.id_equipamento > equipamentos.id_equipamento
 Ref: posicoes_equipamento.id_equipamento > equipamentos.id_equipamento
+Ref: posicoes_equipamento.id_viagem > viagens.id_viagem
 Ref: posicoes_agente.id_agente > agentes.id_agente
 Ref: ocorrencias.id_localizacao > localizacoes.id_localizacao
 Ref: ocorrencias.id_orgao > orgaos.id_orgao

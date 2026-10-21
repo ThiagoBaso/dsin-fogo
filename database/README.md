@@ -1,22 +1,23 @@
-# Banco de referência F.O.G.O.
+# Banco de referencia F.O.G.O.
 
-Schema de referência para MySQL 8.0, baseado em `DER_FOGO.dbml`. O script cria tabelas e índices sem apagar tabelas ou dados preexistentes.
+Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 
 ## Arquivos
 
-- `DER_FOGO.dbml`: modelo lógico original.
+- `DER_FOGO.dbml`: modelo logico.
 - `schema.sql`: schema MySQL 8.0 / InnoDB / utf8mb4.
-- `generate_data.py`: gera SQL de demonstração com seed reprodutível.
-- `generate_routes.py`: baixa e guarda a malha viária de Marília em GraphML e interpola rotas nas vias.
-- `validate_data.py`: valida quantidades e integridade básica no banco.
-- `seed.sql`: saída gerada localmente, não versionada por padrão.
-- `marilia.graphml`: cache da malha OSM, gerado na primeira execução.
+- `migrate_active_trips.sql`: non-destructive upgrade for an existing Compose database volume.
+- `generate_data.py`: gera a massa SQL de demonstracao.
+- `generate_routes.py`: cria e interpola rotas pela malha viaria OpenStreetMap de Marilia.
+- `validate_data.py`: valida integridade, extremidades das viagens ativas e limites geograficos.
+- `seed.sql`: massa de demonstracao aplicada junto ao schema em um banco novo.
+- `marilia.graphml`: cache local da malha viaria OSM.
 
-O modelo original foi preservado e complementado com `viagens` e `posicoes_equipamento.id_viagem`/`velocidade_kmh`, além dos índices, checagens e enums para apoiar integridade e consultas. Cada rota tem no mínimo 120 posições; viagens maiores são amostradas em intervalos de até 10 m ao longo da geometria viária para que as linhas exibidas no mapa acompanhem as ruas. Endereços sintéticos não alegam ser ruas ou CEPs reais; suas coordenadas vêm de nós da malha do OpenStreetMap.
+O schema inclui viagens em andamento e concluídas. O seed gera 180 viagens concluidas e uma viagem ativa para cada veiculo movel que esteja a mais de 100 m da sua localizacao cadastrada. Essas rotas demonstrativas ligam a localizacao cadastrada (base simulada) a ultima posicao GPS historica do veiculo. Cada rota tem ao menos 120 posicoes. Localizacoes, enderecos e viagens sao dados sinteticos e nao representam operacao real.
 
-## Instalação e uso
+## Instalacao e uso
 
-Use Python 3.10+ e MySQL 8.0. No diretório do projeto:
+Use Python 3.10+ e MySQL 8.0. No diretorio do projeto:
 
 ```powershell
 py -m venv .venv
@@ -27,10 +28,12 @@ py database\generate_data.py --seed 20261020
 mysql -u root -p fogo < database\seed.sql
 ```
 
-A primeira geração requer acesso à API do OpenStreetMap/Overpass. O grafo é salvo em `database/marilia.graphml` e reutilizado nas seguintes execuções. Se a obtenção falhar, o processo para com erro explícito; não substitui rotas por linhas inventadas. É possível passar `--graph caminho.graphml` para usar outro cache OSM.
+A primeira geracao requer acesso ao OpenStreetMap/Overpass para obter a malha, que fica em cache no arquivo GraphML. Se a obtencao falhar, a geracao para com erro; nao substitui rotas por linhas inventadas.
 
-Para conferir os registros offline e medir o desvio da linha desenhada para as vias OSM, execute `py database\validate_data.py --seed-sql database\seed.sql`. Para validar dados já importados, configure as variáveis de conexão (veja `.env.example`) e execute `py database\validate_data.py`. O script lê variáveis `MYSQL_*` do ambiente; não lê `.env` automaticamente. A importação do `seed.sql` é destinada a um banco vazio de demonstração: usa IDs determinísticos e não apaga dados. Não importe em produção nem repita sobre a mesma base sem limpar a base de demonstração.
+O Docker Compose monta `schema.sql` e `seed.sql` como scripts de inicializacao do MySQL. O MySQL executa esses scripts somente quando cria um volume vazio. Para um volume existente, o servico `database-migrate` aplica a mudanca de viagens e inclui as rotas ativas de forma idempotente, preservando os outros dados. A API aguarda a migracao concluir. Nao remova `fogo_mysql_data`, pois isso apagaria os dados.
 
-## Observações
+Para validar o seed offline, conferir as viagens ativas e verificar os limites geograficos, execute `py database\validate_data.py --seed-sql database\seed.sql`. Para validar uma base importada, configure `MYSQL_*` e execute `py database\validate_data.py`.
 
-O grafo OSM e as posições de dispositivos são geográficos reais ou fictícios, respectivamente: os equipamentos, agentes, eventos, trajetos e padrões analíticos são inteiramente sintéticos. Os setores/bairros e regiões desta massa são referências demonstrativas, não divisões oficiais de Marília. `seed.sql` e o GraphML são artefatos locais grandes; gere-os quando necessário em vez de mantê-los no repositório.
+## Observacoes
+
+O grafo OSM e geografico. Equipamentos, agentes, eventos, locais cadastrados, trajetos e padroes analiticos sao sinteticos. Bairros, setores e regioes nao sao divisoes oficiais de Marilia. A massa usa IDs deterministas e data corrente para que as viagens ativas estejam atuais no momento da geracao.

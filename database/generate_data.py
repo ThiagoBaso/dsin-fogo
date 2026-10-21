@@ -8,11 +8,11 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from generate_routes import load_graph, route_points
+from generate_routes import load_graph, route_between_points, route_points
 
 HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("fogo.generate")
-NOW = datetime(2026, 10, 20, 12, 0, 0)
+NOW = datetime.now().replace(microsecond=0)
 
 
 def q(value):
@@ -36,6 +36,51 @@ def insert(table, columns, rows, batch=500):
         values = ["(" + ", ".join(q(v) for v in row) + ")" for row in rows[offset:offset + batch]]
         statements.append(head + ",\n".join(values) + ";")
     return "\n".join(statements) + "\n"
+
+
+def migration_sql(active_trips, active_positions):
+    parts = ["""-- Idempotent upgrade for persistent demo volumes, generated from the active-trip seed rows.
+DROP PROCEDURE IF EXISTS migrate_active_trip_schema;
+DELIMITER //
+CREATE PROCEDURE migrate_active_trip_schema()
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_schema = DATABASE() AND table_name = 'viagens' AND constraint_name = 'chk_viagem_periodo') THEN
+    ALTER TABLE viagens DROP CHECK chk_viagem_periodo;
+  END IF;
+  ALTER TABLE viagens MODIFY COLUMN fim_em DATETIME NULL, MODIFY COLUMN situacao ENUM('em_andamento','concluida','interrompida') NOT NULL DEFAULT 'concluida';
+  ALTER TABLE viagens ADD CONSTRAINT chk_viagem_periodo CHECK ((situacao = 'em_andamento' AND fim_em IS NULL) OR (situacao <> 'em_andamento' AND fim_em IS NOT NULL AND fim_em > inicio_em));
+  IF NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'viagens' AND index_name = 'ix_viagem_equip_situacao_inicio') THEN
+    ALTER TABLE viagens ADD KEY ix_viagem_equip_situacao_inicio (id_equipamento, situacao, inicio_em);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'posicoes_equipamento' AND index_name = 'uq_pos_viagem_tempo') THEN
+    ALTER TABLE posicoes_equipamento ADD UNIQUE KEY uq_pos_viagem_tempo (id_viagem, registrado_em);
+  END IF;
+END//
+DELIMITER ;
+CALL migrate_active_trip_schema();
+DROP PROCEDURE migrate_active_trip_schema;
+START TRANSACTION;
+""",
+        insert("viagens", ["id_viagem", "id_equipamento", "inicio_em", "fim_em", "distancia_m", "situacao"], active_trips)
+        .replace("INSERT INTO `viagens`", "INSERT IGNORE INTO `viagens`"),
+        """CREATE TEMPORARY TABLE migration_active_positions (
+  id_viagem INT UNSIGNED NOT NULL,
+  id_equipamento INT UNSIGNED NOT NULL,
+  latitude DECIMAL(10,7) NOT NULL,
+  longitude DECIMAL(10,7) NOT NULL,
+  velocidade_kmh DECIMAL(6,2),
+  registrado_em DATETIME NOT NULL
+) ENGINE=InnoDB;
+""",
+        insert("migration_active_positions", ["id_viagem", "id_equipamento", "latitude", "longitude", "velocidade_kmh", "registrado_em"], active_positions)
+        .replace("INSERT INTO `migration_active_positions`", "INSERT INTO migration_active_positions"),
+        """INSERT IGNORE INTO posicoes_equipamento (id_equipamento, id_viagem, latitude, longitude, velocidade_kmh, registrado_em)
+SELECT src.id_equipamento, src.id_viagem, src.latitude, src.longitude, src.velocidade_kmh, src.registrado_em
+FROM migration_active_positions src
+;
+COMMIT;
+"""]
+    return "\n".join(parts)
 
 
 def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = False):
@@ -73,6 +118,8 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         locations.append((i + 1, i % 40 + 1, None, "Marília", "SP", None,
                           f"Referência sintética {i + 1:03d}; coordenada de via OSM", round(lat, 7), round(lon, 7)))
     add("localizacoes", ["id_localizacao", "id_bairro", "cep", "cidade", "uf", "logradouro", "referencia", "latitude", "longitude"], locations)
+    # Route helpers use OSM order (longitude, latitude); SQL stores (latitude, longitude).
+    location_coords = {row[0]: (row[8], row[7]) for row in locations}
 
     types = [
         ("Radar fixo", "fixo", "radar"), ("Radar móvel", "movel", "radar"), ("Câmera de monitoramento", "fixo", "camera"),
@@ -155,14 +202,17 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
 
     trip_rows, positions = [], []
     min_positions_per_trip = 0
+    active_trip_count = 0
     if not without_routes:
         mobile_equipment = [i for i, tid in equipment_type.items() if tid in mobile_ids]
         trip_id, pos_id = 0, 0
+        latest_positions = {}
+        outside_base_count = 0
         for equip_id in mobile_equipment:
             vehicle_start = NOW - timedelta(days=rng.randint(35, 180))
             for trip_index in range(3):
                 trip_id += 1
-                points, distance = route_points(graph, 120, rng, max_spacing_m=10.0)
+                points, distance = route_points(graph, 120, rng, max_spacing_m=200.0)
                 min_positions_per_trip = min(min_positions_per_trip or len(points), len(points))
                 # Three non-overlapping runs per unit, each at least a day apart.
                 start = vehicle_start + timedelta(days=trip_index * 7, hours=rng.randint(0, 10))
@@ -174,8 +224,32 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
                     pos_id += 1
                     at = start + timedelta(seconds=(duration_seconds * ix) // (len(points) - 1))
                     positions.append((pos_id, equip_id, trip_id, round(lat, 7), round(lon, 7), round(speed * rng.uniform(.75, 1.2), 2), at))
+                latest_positions[equip_id] = points[-1]
         if len(trip_rows) != 180 or len(positions) < 21600:
             raise AssertionError("Trip/position minimums were not met")
+
+        equipment_by_id = {row[0]: row for row in equipment_rows}
+        for equip_id in mobile_equipment:
+            equipment = equipment_by_id[equip_id]
+            origin = location_coords[equipment[3]]
+            destination = latest_positions[equip_id]
+            if haversine_m(origin, destination) <= 100:
+                continue
+            outside_base_count += 1
+
+            points, distance = route_between_points(graph, origin, destination, 120, max_spacing_m=25.0)
+            speed = rng.uniform(18, 42)
+            duration_seconds = math.ceil(max(600, distance / (speed / 3.6), (len(points) - 1) * 2))
+            start = NOW - timedelta(seconds=duration_seconds)
+            trip_id += 1
+            trip_rows.append((trip_id, equip_id, start, None, round(distance, 2), "em_andamento"))
+            for ix, (lon, lat) in enumerate(points):
+                pos_id += 1
+                at = start + timedelta(seconds=(duration_seconds * ix) // (len(points) - 1))
+                positions.append((pos_id, equip_id, trip_id, round(lat, 7), round(lon, 7), round(speed * rng.uniform(.75, 1.2), 2), at))
+            active_trip_count += 1
+        if active_trip_count != outside_base_count:
+            raise AssertionError(f"Expected one active base-to-GPS trip for every vehicle outside its base; got {active_trip_count}/{outside_base_count}")
     add("viagens", ["id_viagem", "id_equipamento", "inicio_em", "fim_em", "distancia_m", "situacao"], trip_rows)
     add("posicoes_equipamento", ["id_posicao", "id_equipamento", "id_viagem", "latitude", "longitude", "velocidade_kmh", "registrado_em"], positions)
 
@@ -202,12 +276,31 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         forecasts.append((i, i, NOW, NOW + timedelta(hours=24), risk, level, "padrão sintético horário/regional", NOW))
     add("previsoes_risco", ["id_previsao", "id_regiao", "janela_inicio", "janela_fim", "indice_risco", "nivel_risco", "metodo", "gerada_em"], forecasts)
     sql.append("COMMIT;\n")
-    out.write_text("\n".join(sql), encoding="utf-8")
-    summary = {**counts, "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type), "posicoes_min_por_viagem": min_positions_per_trip, "seed": seed}
+    temp_out = out.with_suffix(out.suffix + ".tmp")
+    temp_out.write_text("\n".join(sql), encoding="utf-8")
+    temp_out.replace(out)
+    active_trip_rows = [row for row in trip_rows if row[5] == "em_andamento"]
+    active_trip_ids = {row[0] for row in active_trip_rows}
+    active_position_rows = [
+        (row[2], row[1], row[3], row[4], row[5], row[6])
+        for row in positions if row[2] in active_trip_ids
+    ]
+    migration_path = out.with_name("migrate_active_trips.sql")
+    migration_temp = migration_path.with_suffix(migration_path.suffix + ".tmp")
+    migration_temp.write_text(migration_sql(active_trip_rows, active_position_rows), encoding="utf-8")
+    migration_temp.replace(migration_path)
+    summary = {**counts, "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type), "viagens_em_andamento": active_trip_count, "posicoes_min_por_viagem": min_positions_per_trip, "seed": seed}
     LOG.info("Wrote %s", out)
     for key, value in summary.items():
         LOG.info("%s: %s", key, value)
     return summary
+
+
+def haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
+    lon1, lat1, lon2, lat2 = map(math.radians, (*a, *b))
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 2 * 6_371_000 * math.asin(math.sqrt(h))
 
 
 def main():

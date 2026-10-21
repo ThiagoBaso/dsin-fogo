@@ -21,6 +21,21 @@ services:
       retries: 30
       start_period: 20s
 
+  database-migrate:
+    image: mysql:8.0
+    restart: "no"
+    environment:
+      MYSQL_DATABASE: fogo
+      MYSQL_USER: ${MYSQL_USER:?Set MYSQL_USER in .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    volumes:
+      - ./database/migrate_active_trips.sql:/migration.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mysql --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /migration.sql"]
+    depends_on:
+      database:
+        condition: service_healthy
+
   api:
     build:
       context: ./api
@@ -36,8 +51,8 @@ services:
     ports:
       - "${API_PUBLISHED_PORT:-8000}:8000"
     depends_on:
-      database:
-        condition: service_healthy
+      database-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 10s
