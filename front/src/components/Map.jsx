@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -50,16 +50,12 @@ function criarIcone(ponto) {
   return marcadores.get(chave);
 }
 
-export default function MapaMarilia({ pontos, ativo }) {
-  const [selecionadoId, setSelecionadoId] = useState(null);
-  const selecionado = pontos.find((ponto) => ponto.id === selecionadoId);
-
+export default function MapaMarilia({ pontos, ativo, onSelecionar }) {
   return (
-    <div>
       <MapContainer
         center={ponto_inicial}
         zoom={13}
-        style={{ height: "820px", width: "100%" }}
+        style={{ height: "100%", width: "100%" }}
       >
         <AjustarTamanhoMapa ativo={ativo} />
         <TileLayer
@@ -73,7 +69,7 @@ export default function MapaMarilia({ pontos, ativo }) {
             position={[ponto.latitude, ponto.longitude]}
             icon={criarIcone(ponto)}
             eventHandlers={{
-              click: () => setSelecionadoId(ponto.id),
+              click: () => onSelecionar(ponto),
             }}
           >
             <Popup>
@@ -83,17 +79,5 @@ export default function MapaMarilia({ pontos, ativo }) {
           </Marker>
         ))}
       </MapContainer>
-
-      {selecionado && (
-        <section>
-          <h3>{selecionado.nome}</h3>
-          <p>Situação: {equipmentSituations[selecionado.situacao_id]?.label || selecionado.situacao}</p>
-          <p>
-            Coordenadas: {selecionado.latitude},
-            {" "}{selecionado.longitude}
-          </p>
-        </section>
-      )}
-    </div>
   );
 }

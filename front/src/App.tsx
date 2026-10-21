@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Map from './components/Map';
 import TopBarMap from './components/TopBarMap';
 import ItemList from './components/ItemList';
+import EquipmentDetails from './components/EquipmentDetails';
 import { Aba, Ponto } from './types';
 import { equipmentTypes } from './equipmentCatalog';
 
@@ -14,6 +15,8 @@ function App() {
   const [tipoSelecionado, setTipoSelecionado] = useState('1');
   const [tipoAplicado, setTipoAplicado] = useState('1');
   const [painelExpandido, setPainelExpandido] = useState(true);
+  const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
+  const painelDetalhes = useRef<HTMLElement>(null);
 
   const pontosFiltrados = useMemo(
     () => tipoAplicado === 'todos'
@@ -21,6 +24,12 @@ function App() {
       : pontos.filter((ponto) => ponto.tipo_id === Number(tipoAplicado)),
     [pontos, tipoAplicado],
   );
+  const pontoSelecionado = pontosFiltrados.find((ponto) => ponto.id === selecionadoId) || null;
+
+  function selecionarEquipamento(ponto: Ponto) {
+    setSelecionadoId(ponto.id);
+    painelDetalhes.current?.scrollTo({ top: 0 });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,6 +61,9 @@ function App() {
           onSubmit={(event) => {
             event.preventDefault();
             setTipoAplicado(tipoSelecionado);
+            if (tipoSelecionado !== 'todos' && pontoSelecionado?.tipo_id !== Number(tipoSelecionado)) {
+              setSelecionadoId(null);
+            }
           }}
         >
           <div className="equipment-filters-content">
@@ -90,12 +102,14 @@ function App() {
         <TopBarMap abaAtiva={abaAtiva} onChange={setAbaAtiva} />
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
-        <div hidden={abaAtiva !== 'mapa'}>
-          <Map pontos={pontosFiltrados} ativo={abaAtiva === 'mapa'} />
+        <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
+          <Map pontos={pontosFiltrados} ativo={abaAtiva === 'mapa'} onSelecionar={selecionarEquipamento} />
         </div>
-        {abaAtiva === 'lista' && <ItemList pontos={pontosFiltrados} />}
+        {abaAtiva === 'lista' && <ItemList pontos={pontosFiltrados} selecionadoId={selecionadoId} onSelecionar={selecionarEquipamento} />}
       </div>
-      <div className='rigth-painel'></div>
+      <aside className='rigth-painel' aria-label="Informações do equipamento" ref={painelDetalhes}>
+        <EquipmentDetails ponto={pontoSelecionado} onClose={() => setSelecionadoId(null)} />
+      </aside>
     </div>
   );
 }
