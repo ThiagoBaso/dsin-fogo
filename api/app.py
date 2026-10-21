@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from contextlib import closing
+from datetime import datetime
 
 import mysql.connector
 from fastapi import FastAPI, HTTPException, Query
@@ -58,7 +59,52 @@ def health():
 
 
 @app.get("/api/equipamentos")
-def list_equipamentos():
+def list_equipamentos(em: datetime | None = None):
+    if em is not None:
+        return fetch_all(
+            """
+            SELECT e.id_equipamento AS id,
+                   CONCAT(t.nome, ' ', e.numero_serie) AS nome,
+                   t.id_tipo AS tipo_id, t.nome AS tipo, t.mobilidade,
+                   s.id_situacao AS situacao_id, s.nome AS situacao,
+                   CAST(COALESCE(pos.latitude, l.latitude) AS DOUBLE) AS latitude,
+                   CAST(COALESCE(pos.longitude, l.longitude) AS DOUBLE) AS longitude,
+                   CAST(l.latitude AS DOUBLE) AS latitude_fixa,
+                   CAST(l.longitude AS DOUBLE) AS longitude_fixa,
+                   CAST(pos.latitude AS DOUBLE) AS latitude_gps,
+                   CAST(pos.longitude AS DOUBLE) AS longitude_gps,
+                   l.logradouro, l.referencia, l.cep, l.cidade, l.uf,
+                   b.nome AS bairro, r.nome AS regiao,
+                   CASE WHEN s.disponivel = 1 THEN 'ativo' ELSE 'inativo' END AS status
+            FROM equipamentos e
+            JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
+            LEFT JOIN historico_situacoes hs ON hs.id_historico = (
+                SELECT h.id_historico
+                FROM historico_situacoes h
+                WHERE h.id_equipamento = e.id_equipamento AND h.iniciado_em <= %s
+                ORDER BY h.iniciado_em DESC, h.id_historico DESC
+                LIMIT 1
+            )
+            JOIN situacoes_equipamento s ON s.id_situacao = COALESCE(hs.id_situacao, e.id_situacao)
+            LEFT JOIN localizacoes l ON l.id_localizacao = e.id_localizacao
+            LEFT JOIN bairros b ON b.id_bairro = l.id_bairro
+            LEFT JOIN regioes r ON r.id_regiao = b.id_regiao
+            LEFT JOIN posicoes_equipamento pos ON pos.id_posicao = (
+                SELECT p.id_posicao
+                FROM posicoes_equipamento p
+                WHERE p.id_equipamento = e.id_equipamento
+                  AND p.id_viagem IS NOT NULL
+                  AND p.registrado_em <= %s
+                ORDER BY p.registrado_em DESC, p.id_posicao DESC
+                LIMIT 1
+            )
+            WHERE e.cadastrado_em <= %s
+              AND (e.instalado_em IS NULL OR e.instalado_em <= %s)
+            ORDER BY e.id_equipamento
+            """,
+            (em, em, em, em),
+        )
+
     return fetch_all(
         """
         SELECT e.id_equipamento AS id,
@@ -96,8 +142,9 @@ def list_equipamentos():
 
 
 @app.get("/api/equipamentos/{equipamento_id}")
-def get_equipamento(equipamento_id: int):
-    rows = fetch_all(
+def get_equipamento(equipamento_id: int, em: datetime | None = None):
+    if em is None:
+        rows = fetch_all(
         """
         SELECT e.id_equipamento AS id, e.numero_serie, e.marca, e.modelo,
                e.cadastrado_em, e.instalado_em,
@@ -125,7 +172,45 @@ def get_equipamento(equipamento_id: int):
         WHERE e.id_equipamento = %s
         """,
         (equipamento_id,),
-    )
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT e.id_equipamento AS id, e.numero_serie, e.marca, e.modelo,
+                   e.cadastrado_em, e.instalado_em,
+                   t.id_tipo AS tipo_id, t.nome AS tipo, t.mobilidade,
+                   s.id_situacao AS situacao_id, s.nome AS situacao,
+                   o.nome AS orgao_nome, o.sigla AS orgao_sigla,
+                   l.logradouro, l.referencia, l.cep, l.cidade, l.uf,
+                   b.nome AS bairro, r.nome AS regiao,
+                   CAST(COALESCE(pos.latitude, l.latitude) AS DOUBLE) AS latitude,
+                   CAST(COALESCE(pos.longitude, l.longitude) AS DOUBLE) AS longitude,
+                   pos.registrado_em AS posicao_registrada_em,
+                   CAST(pos.velocidade_kmh AS DOUBLE) AS velocidade_kmh
+            FROM equipamentos e
+            JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
+            LEFT JOIN historico_situacoes hs ON hs.id_historico = (
+                SELECT h.id_historico FROM historico_situacoes h
+                WHERE h.id_equipamento = e.id_equipamento AND h.iniciado_em <= %s
+                ORDER BY h.iniciado_em DESC, h.id_historico DESC LIMIT 1
+            )
+            JOIN situacoes_equipamento s ON s.id_situacao = COALESCE(hs.id_situacao, e.id_situacao)
+            JOIN orgaos o ON o.id_orgao = e.id_orgao
+            LEFT JOIN localizacoes l ON l.id_localizacao = e.id_localizacao
+            LEFT JOIN bairros b ON b.id_bairro = l.id_bairro
+            LEFT JOIN regioes r ON r.id_regiao = b.id_regiao
+            LEFT JOIN posicoes_equipamento pos ON pos.id_posicao = (
+                SELECT p.id_posicao FROM posicoes_equipamento p
+                WHERE p.id_equipamento = e.id_equipamento
+                  AND p.id_viagem IS NOT NULL AND p.registrado_em <= %s
+                ORDER BY p.registrado_em DESC, p.id_posicao DESC LIMIT 1
+            )
+            WHERE e.id_equipamento = %s
+              AND e.cadastrado_em <= %s
+              AND (e.instalado_em IS NULL OR e.instalado_em <= %s)
+            """,
+            (em, em, equipamento_id, em, em),
+        )
     if not rows:
         raise HTTPException(status_code=404, detail="Equipamento não encontrado")
     equipamento = rows[0]

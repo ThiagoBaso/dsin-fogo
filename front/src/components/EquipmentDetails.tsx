@@ -40,7 +40,7 @@ function formatAttribute(attribute: AtributoEquipamento) {
   return unit ? `${value} ${unit}` : value;
 }
 
-export default function EquipmentDetails({ ponto, onClose }: { ponto: Ponto | null; onClose: () => void }) {
+export default function EquipmentDetails({ ponto, dataHora, onClose }: { ponto: Ponto | null; dataHora: string | null; onClose: () => void }) {
   const [detalhes, setDetalhes] = useState<DetalhesEquipamento | null>(null);
   const [erro, setErro] = useState('');
   const [tentativa, setTentativa] = useState(0);
@@ -51,7 +51,8 @@ export default function EquipmentDetails({ ponto, onClose }: { ponto: Ponto | nu
     setErro('');
     if (equipamentoId === undefined) return;
     const controller = new AbortController();
-    fetch(`${process.env.REACT_APP_API_URL || ''}/api/equipamentos/${equipamentoId}`, { signal: controller.signal })
+    const queryData = dataHora ? `?em=${encodeURIComponent(dataHora)}` : '';
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/equipamentos/${equipamentoId}${queryData}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`API respondeu ${response.status}`);
         return response.json() as Promise<DetalhesEquipamento>;
@@ -63,7 +64,7 @@ export default function EquipmentDetails({ ponto, onClose }: { ponto: Ponto | nu
         if (!controller.signal.aborted && error.name !== 'AbortError') setErro('Não foi possível carregar os detalhes do equipamento.');
       });
     return () => controller.abort();
-  }, [equipamentoId, tentativa]);
+  }, [equipamentoId, dataHora, tentativa]);
 
   const atual = detalhes?.id === equipamentoId ? detalhes : null;
 
@@ -103,7 +104,7 @@ export default function EquipmentDetails({ ponto, onClose }: { ponto: Ponto | nu
           <div className="equipment-detail-group">
             <h3>Condição</h3>
             <dl>
-              <Field label="Situação atual" value={equipmentSituations[atual.situacao_id]?.label || atual.situacao} />
+              <Field label={dataHora ? 'Situação no período' : 'Situação atual'} value={equipmentSituations[atual.situacao_id]?.label || atual.situacao} />
               <Field label="Mobilidade" value={atual.mobilidade === 'fixo' ? 'Fixo' : 'Móvel'} />
             </dl>
           </div>

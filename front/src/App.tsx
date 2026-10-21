@@ -28,6 +28,10 @@ const emptyLocationFilters: LocationFilters = {
   busca: '',
 };
 
+function toLocalDateTimeValue(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 function CheckboxFilterGroup({
   title,
   options,
@@ -90,6 +94,9 @@ function App() {
   const [filtrosLocalizacao, setFiltrosLocalizacao] = useState<LocationFilters>(emptyLocationFilters);
   const [localizacaoAplicada, setLocalizacaoAplicada] = useState<LocationFilters>(emptyLocationFilters);
   const [posicaoMovel, setPosicaoMovel] = useState<'gps' | 'fixa'>('gps');
+  const [modoData, setModoData] = useState<'atual' | 'historico'>('atual');
+  const [dataHoraSelecionada, setDataHoraSelecionada] = useState(() => toLocalDateTimeValue(new Date()));
+  const [dataHoraAplicada, setDataHoraAplicada] = useState<string | null>(null);
   const [painelExpandido, setPainelExpandido] = useState(true);
   const painelDetalhes = useRef<HTMLElement>(null);
 
@@ -136,7 +143,7 @@ function App() {
   const pontosMapa = exibirApenasSelecionados
     ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
     : pontosFiltrados;
-  const pontoDetalhes = pontos.find((ponto) => ponto.id === detalhesId) || null;
+  const pontoDetalhes = pontosFiltrados.find((ponto) => ponto.id === detalhesId) || null;
 
   function visualizarEquipamento(ponto: Ponto) {
     setDetalhesId(ponto.id);
@@ -170,6 +177,9 @@ function App() {
     setExibirApenasSelecionados(false);
     setPermitirMultisselecao(false);
     setPosicaoMovel('gps');
+    setModoData('atual');
+    setDataHoraSelecionada(toLocalDateTimeValue(new Date()));
+    setDataHoraAplicada(null);
     setSelecionadosIds((selecionados) => selecionados.slice(-1));
 
     const equipamentoDetalhado = pontos.find((ponto) => ponto.id === detalhesId);
@@ -180,20 +190,30 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const queryData = dataHoraAplicada
+      ? `?em=${encodeURIComponent(dataHoraAplicada)}`
+      : '';
 
-    fetch(`${process.env.REACT_APP_API_URL || ''}/api/equipamentos`, { signal: controller.signal })
+    setCarregando(true);
+    setErro('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/equipamentos${queryData}`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`API respondeu ${response.status}`);
         return response.json() as Promise<Ponto[]>;
       })
-      .then(setPontos)
+      .then((dados) => {
+        setPontos(dados);
+        setDetalhesId((idAtual) => idAtual !== null && dados.some((ponto) => ponto.id === idAtual) ? idAtual : null);
+      })
       .catch((error: Error) => {
         if (error.name !== 'AbortError') setErro('Não foi possível carregar os equipamentos da API.');
       })
-      .finally(() => setCarregando(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setCarregando(false);
+      });
 
     return () => controller.abort();
-  }, []);
+  }, [dataHoraAplicada]);
 
   return (
     <div className={painelExpandido ? 'App' : 'App filters-collapsed'}>
@@ -210,13 +230,7 @@ function App() {
             setTiposAplicados(tiposSelecionados);
             setSituacoesAplicadas(situacoesSelecionadas);
             setLocalizacaoAplicada(filtrosLocalizacao);
-            const equipamentoDetalhado = pontos.find((ponto) => ponto.id === detalhesId);
-            if (equipamentoDetalhado && (
-              !tiposSelecionados.includes(equipamentoDetalhado.tipo_id)
-              || !situacoesSelecionadas.includes(equipamentoDetalhado.situacao_id)
-            )) {
-              setDetalhesId(null);
-            }
+            setDataHoraAplicada(modoData === 'historico' ? dataHoraSelecionada : null);
           }}
         >
           <div className="equipment-filters-content">
@@ -226,6 +240,41 @@ function App() {
                 Resetar
               </button>
             </div>
+            <section className="equipment-time-filters" aria-label="Período dos equipamentos">
+              <h3>Período</h3>
+              <label className="equipment-time-option">
+                <input
+                  type="radio"
+                  name="modo-data"
+                  value="atual"
+                  checked={modoData === 'atual'}
+                  onChange={() => setModoData('atual')}
+                />
+                <span>Atual</span>
+              </label>
+              <label className="equipment-time-option">
+                <input
+                  type="radio"
+                  name="modo-data"
+                  value="historico"
+                  checked={modoData === 'historico'}
+                  onChange={() => setModoData('historico')}
+                />
+                <span>Escolher data e hora</span>
+              </label>
+              {modoData === 'historico' && (
+                <label className="equipment-location-control">
+                  <span>Data e hora</span>
+                  <input
+                    type="datetime-local"
+                    value={dataHoraSelecionada}
+                    max={toLocalDateTimeValue(new Date())}
+                    required
+                    onChange={(event) => setDataHoraSelecionada(event.target.value)}
+                  />
+                </label>
+              )}
+            </section>
             <CheckboxFilterGroup
               title="Tipo de equipamento"
               options={equipmentTypes}
@@ -344,7 +393,7 @@ function App() {
         )}
       </div>
       <aside className='rigth-painel' aria-label="Informações do equipamento" ref={painelDetalhes}>
-        <EquipmentDetails ponto={pontoDetalhes} onClose={() => setDetalhesId(null)} />
+        <EquipmentDetails ponto={pontoDetalhes} dataHora={dataHoraAplicada} onClose={() => setDetalhesId(null)} />
       </aside>
     </div>
   );
