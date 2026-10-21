@@ -1,4 +1,18 @@
 // IDs dos tipos e situações cadastrados no seed. Arquivos e aparência pertencem ao front.
+export const equipmentTypes = [
+  { id: 1, label: 'Radar fixo' },
+  { id: 2, label: 'Radar móvel' },
+  { id: 3, label: 'Câmera de monitoramento' },
+  { id: 4, label: 'Cancela automatizada' },
+  { id: 5, label: 'Totem de estacionamento' },
+  { id: 6, label: 'Balança de caminhões' },
+  { id: 7, label: 'Patinete elétrico' },
+  { id: 8, label: 'Motocicleta' },
+  { id: 9, label: 'Viatura policial' },
+  { id: 10, label: 'Veículo da Guarda Municipal' },
+  { id: 11, label: 'Veículo de fiscalização' },
+];
+
 export const equipmentIcons: Record<number, string> = {
   1: 'radar-fixo',
   2: 'radar-movel',

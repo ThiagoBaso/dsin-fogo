@@ -18,7 +18,13 @@ function AjustarTamanhoMapa({ ativo }) {
   const map = useMap();
 
   useEffect(() => {
-    if (ativo) map.invalidateSize();
+    if (!ativo) return;
+
+    map.invalidateSize();
+    const observer = new ResizeObserver(() => map.invalidateSize({ debounceMoveend: true }));
+    observer.observe(map.getContainer());
+
+    return () => observer.disconnect();
   }, [ativo, map]);
 
   return null;
@@ -45,7 +51,8 @@ function criarIcone(ponto) {
 }
 
 export default function MapaMarilia({ pontos, ativo }) {
-  const [selecionado, setSelecionado] = useState(null);
+  const [selecionadoId, setSelecionadoId] = useState(null);
+  const selecionado = pontos.find((ponto) => ponto.id === selecionadoId);
 
   return (
     <div>
@@ -66,7 +73,7 @@ export default function MapaMarilia({ pontos, ativo }) {
             position={[ponto.latitude, ponto.longitude]}
             icon={criarIcone(ponto)}
             eventHandlers={{
-              click: () => setSelecionado(ponto),
+              click: () => setSelecionadoId(ponto.id),
             }}
           >
             <Popup>
