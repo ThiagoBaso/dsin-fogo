@@ -5,24 +5,77 @@ import TopBarMap from './components/TopBarMap';
 import ItemList from './components/ItemList';
 import EquipmentDetails from './components/EquipmentDetails';
 import { Aba, Ponto } from './types';
-import { equipmentTypes } from './equipmentCatalog';
+import { equipmentSituations, equipmentTypes } from './equipmentCatalog';
+
+const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, situation]) => ({
+  id: Number(id),
+  label: situation.label,
+}));
+
+function CheckboxFilterGroup({
+  title,
+  options,
+  selectedIds,
+  onChange,
+}: {
+  title: string;
+  options: { id: number; label: string }[];
+  selectedIds: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const todosSelecionados = selectedIds.length === options.length;
+
+  return (
+    <details className="equipment-filter-accordion" open>
+      <summary>{title}</summary>
+      <div className="equipment-filter-options" role="group" aria-label={title}>
+        <label className="equipment-filter-option">
+          <input
+            type="checkbox"
+            checked={todosSelecionados}
+            onChange={(event) => onChange(event.target.checked ? options.map((option) => option.id) : [])}
+          />
+          <span>Todos</span>
+        </label>
+        {options.map((option) => (
+          <label className="equipment-filter-option" key={option.id}>
+            <input
+              type="checkbox"
+              checked={selectedIds.includes(option.id)}
+              onChange={(event) => onChange(event.target.checked
+                ? [...selectedIds, option.id]
+                : selectedIds.filter((id) => id !== option.id))}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
   const [pontos, setPontos] = useState<Ponto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
-  const [tipoSelecionado, setTipoSelecionado] = useState('1');
-  const [tipoAplicado, setTipoAplicado] = useState('1');
+  const [tiposSelecionados, setTiposSelecionados] = useState<number[]>([1]);
+  const [tiposAplicados, setTiposAplicados] = useState<number[]>([1]);
+  const [situacoesSelecionadas, setSituacoesSelecionadas] = useState<number[]>(
+    equipmentSituationOptions.map((situation) => situation.id),
+  );
+  const [situacoesAplicadas, setSituacoesAplicadas] = useState<number[]>(
+    equipmentSituationOptions.map((situation) => situation.id),
+  );
   const [painelExpandido, setPainelExpandido] = useState(true);
   const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
   const painelDetalhes = useRef<HTMLElement>(null);
 
   const pontosFiltrados = useMemo(
-    () => tipoAplicado === 'todos'
-      ? pontos
-      : pontos.filter((ponto) => ponto.tipo_id === Number(tipoAplicado)),
-    [pontos, tipoAplicado],
+    () => pontos.filter((ponto) => (
+      tiposAplicados.includes(ponto.tipo_id) && situacoesAplicadas.includes(ponto.situacao_id)
+    )),
+    [pontos, tiposAplicados, situacoesAplicadas],
   );
   const pontoSelecionado = pontosFiltrados.find((ponto) => ponto.id === selecionadoId) || null;
 
@@ -60,25 +113,30 @@ function App() {
           className="equipment-filters"
           onSubmit={(event) => {
             event.preventDefault();
-            setTipoAplicado(tipoSelecionado);
-            if (tipoSelecionado !== 'todos' && pontoSelecionado?.tipo_id !== Number(tipoSelecionado)) {
+            setTiposAplicados(tiposSelecionados);
+            setSituacoesAplicadas(situacoesSelecionadas);
+            if (pontoSelecionado && (
+              !tiposSelecionados.includes(pontoSelecionado.tipo_id)
+              || !situacoesSelecionadas.includes(pontoSelecionado.situacao_id)
+            )) {
               setSelecionadoId(null);
             }
           }}
         >
           <div className="equipment-filters-content">
             <h2>Filtros</h2>
-            <label htmlFor="equipment-type">Tipo de equipamento</label>
-            <select
-              id="equipment-type"
-              value={tipoSelecionado}
-              onChange={(event) => setTipoSelecionado(event.target.value)}
-            >
-              <option value="todos">Todos</option>
-              {equipmentTypes.map((tipo) => (
-                <option key={tipo.id} value={tipo.id}>{tipo.label}</option>
-              ))}
-            </select>
+            <CheckboxFilterGroup
+              title="Tipo de equipamento"
+              options={equipmentTypes}
+              selectedIds={tiposSelecionados}
+              onChange={setTiposSelecionados}
+            />
+            <CheckboxFilterGroup
+              title="Status do equipamento"
+              options={equipmentSituationOptions}
+              selectedIds={situacoesSelecionadas}
+              onChange={setSituacoesSelecionadas}
+            />
           </div>
           <div className="equipment-filters-actions">
             <button type="submit">Atualizar</button>

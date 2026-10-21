@@ -13,7 +13,7 @@
   height: 100%;
   box-sizing: border-box;
   border-right: 1px solid var(--dsin-border);
-  background: var(--dsin-surface);
+  background: #f7f8f7;
   box-shadow: 4px 0 16px #3c454808;
 }
 
@@ -57,15 +57,11 @@
 .equipment-filters-actions button:focus-visible,
 .equipment-details-close:focus-visible,
 .item-select:focus-visible,
-.map-bar button:focus-visible {
+.map-bar button:focus-visible,
+.equipment-filter-accordion summary:focus-visible,
+.equipment-filter-option input:focus-visible {
   outline: 3px solid var(--dsin-focus);
   outline-offset: 2px;
-}
-
-.equipment-filters select:focus {
-  outline: none;
-  border-color: transparent;
-  box-shadow: none;
 }
 
 .filters-collapsed .filter-panel-toggle {
@@ -113,6 +109,9 @@
 }
 
 .equipment-filters-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -128,47 +127,136 @@
   letter-spacing: -0.02em;
 }
 
-.equipment-filters label {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--dsin-text);
-  font-size: 13px;
-  font-weight: 600;
+.equipment-filters h2 {
+  margin: 0 0 2px;
+  padding-left: 12px;
+  border-left: 4px solid var(--dsin-yellow);
+  font-size: 22px;
+  line-height: 1.25;
 }
 
-.equipment-filters select {
-  width: 100%;
-  min-height: 44px;
-  padding: 9px 12px;
-  box-sizing: border-box;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background-color: var(--dsin-surface);
-  color: var(--dsin-text);
-  font-size: 14px;
-  cursor: pointer;
+.equipment-filter-accordion {
+  padding: 15px;
+  border: 1px solid #d8dddd;
+  border-radius: 13px;
+  background: var(--dsin-surface);
+  box-shadow: 0 2px 8px #3c45480a;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.equipment-filters select:hover {
-  border-color: #94a3b8;
+.equipment-filter-accordion[open] {
+  border-color: #bfc6c7;
+  box-shadow: 0 4px 12px #3c45480d;
+}
+
+.equipment-filter-accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--dsin-ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  list-style: none;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.equipment-filter-accordion summary:hover {
+  color: #525c5f;
+}
+
+.equipment-filter-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.equipment-filter-accordion summary::after {
+  content: '';
+  flex: 0 0 9px;
+  width: 9px;
+  height: 9px;
+  margin: -5px 3px 0 0;
+  transform: rotate(45deg);
+  border-right: 2px solid var(--dsin-charcoal);
+  border-bottom: 2px solid var(--dsin-charcoal);
+  transition: transform 140ms ease;
+}
+
+.equipment-filter-accordion[open] summary::after {
+  margin-top: 5px;
+  transform: rotate(225deg);
+}
+
+.equipment-filter-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  margin-top: 14px;
+}
+
+.equipment-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+  padding: 7px 6px;
+  border-radius: 7px;
+  color: var(--dsin-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.equipment-filter-option:hover {
+  background: #f4f5f3;
+}
+
+.equipment-filter-option:has(input:checked) {
+  color: var(--dsin-ink);
+  font-weight: 600;
+}
+
+.equipment-filter-option:first-child {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--dsin-border);
+  border-radius: 0;
+}
+
+.equipment-filter-option input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--dsin-yellow);
+  cursor: pointer;
+}
+
+.equipment-filter-option span {
+  overflow-wrap: anywhere;
 }
 
 .equipment-filters-actions {
   flex-shrink: 0;
   padding: 16px 20px 20px;
   border-top: 1px solid var(--dsin-border);
-  background: var(--dsin-surface);
+  background: #f7f8f7;
 }
 
 .equipment-filters-actions button {
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--dsin-yellow);
   color: var(--dsin-ink);
   font-weight: 650;
+  letter-spacing: 0.02em;
   cursor: pointer;
   transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
@@ -427,6 +515,10 @@
 
   .equipment-filters-content {
     padding: 20px 14px;
+  }
+
+  .equipment-filter-options {
+    grid-template-columns: 1fr;
   }
 
   .equipment-filters-actions {
