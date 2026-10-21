@@ -1,8 +1,8 @@
 .equipment-div-icon { background: transparent; border: 0; }
 .equipment-marker {
   position: relative; display: grid; width: 38px; height: 38px; place-items: center;
-  border: 2px solid #fff; border-radius: 50% 50% 50% 10%; background: #12233f;
-  box-shadow: 0 2px 7px #0f172a66; transform: rotate(-45deg);
+  border: 2px solid #fff; border-radius: 50% 50% 50% 10%; background: #3c4548;
+  box-shadow: 0 2px 7px #3c454866; transform: rotate(-45deg);
 }
 .equipment-marker img { width: 23px; height: 23px; object-fit: contain; transform: rotate(45deg); }
 .equipment-state {
