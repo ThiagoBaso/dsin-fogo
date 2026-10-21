@@ -239,6 +239,78 @@ def get_equipamento(equipamento_id: int, em: datetime | None = None):
     return equipamento
 
 
+@app.get("/api/equipamentos/{equipamento_id}/ocorrencias")
+def list_ocorrencias_equipamento(equipamento_id: int, em: datetime | None = None):
+    return fetch_all(
+        """
+        SELECT o.id_ocorrencia AS id, o.tipo, o.gravidade, o.status,
+               o.descricao, o.ocorrida_em,
+               l.logradouro, b.nome AS bairro, l.cidade, l.uf
+        FROM ocorrencias o
+        LEFT JOIN localizacoes l ON l.id_localizacao = o.id_localizacao
+        LEFT JOIN bairros b ON b.id_bairro = l.id_bairro
+        WHERE o.id_equipamento = %s
+          AND (%s IS NULL OR o.ocorrida_em <= %s)
+        ORDER BY o.ocorrida_em DESC, o.id_ocorrencia DESC
+        """,
+        (equipamento_id, em, em),
+    )
+
+
+@app.get("/api/equipamentos/{equipamento_id}/viagens")
+def list_viagens_equipamento(
+    equipamento_id: int,
+    limit: int = Query(default=10, ge=1, le=30),
+    offset: int = Query(default=0, ge=0),
+):
+    viagens = fetch_all(
+        """
+        SELECT v.id_viagem AS id, v.id_equipamento, e.numero_serie,
+               v.inicio_em, v.fim_em, CAST(v.distancia_m AS DOUBLE) AS distancia_m,
+               v.situacao
+        FROM viagens v
+        JOIN equipamentos e ON e.id_equipamento = v.id_equipamento
+        WHERE v.id_equipamento = %s
+          AND EXISTS (SELECT 1 FROM posicoes_equipamento p WHERE p.id_viagem = v.id_viagem)
+        ORDER BY v.inicio_em DESC, v.id_viagem DESC
+        LIMIT %s OFFSET %s
+        """,
+        (equipamento_id, limit, offset),
+    )
+    if not viagens:
+        return []
+
+    viagem_ids = [viagem["id"] for viagem in viagens]
+    placeholders = ",".join(["%s"] * len(viagem_ids))
+    posicoes = fetch_all(
+        f"""
+        SELECT id_viagem, CAST(latitude AS DOUBLE) AS latitude,
+               CAST(longitude AS DOUBLE) AS longitude, registrado_em
+        FROM posicoes_equipamento
+        WHERE id_viagem IN ({placeholders})
+        ORDER BY id_viagem, registrado_em, id_posicao
+        """,
+        tuple(viagem_ids),
+    )
+
+    por_viagem: dict[int, list[dict]] = {viagem_id: [] for viagem_id in viagem_ids}
+    for posicao in posicoes:
+        por_viagem[posicao["id_viagem"]].append({
+            "latitude": posicao["latitude"],
+            "longitude": posicao["longitude"],
+            "registrado_em": posicao["registrado_em"],
+        })
+
+    for viagem in viagens:
+        pontos = por_viagem[viagem["id"]]
+        if len(pontos) > 80:
+            ultimo_indice = len(pontos) - 1
+            indices = [round(index * ultimo_indice / 79) for index in range(80)]
+            pontos = [pontos[index] for index in indices]
+        viagem["posicoes"] = pontos
+    return viagens
+
+
 @app.get("/api/viagens")
 def list_viagens(limit: int = Query(default=100, ge=1, le=500)):
     return fetch_all(

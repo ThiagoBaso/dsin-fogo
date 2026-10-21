@@ -325,8 +325,8 @@ function App() {
               selectedIds={situacoesSelecionadas}
               onChange={setSituacoesSelecionadas}
             />
-            <section className="equipment-location-filters" aria-label="Filtros de localização">
-              <h3>Localização</h3>
+            <details className="equipment-filter-accordion equipment-location-filters" aria-label="Filtros de localização">
+              <summary>Localização</summary>
               <label className="equipment-location-control">
                 <span>Bairro</span>
                 <select value={filtrosLocalizacao.bairro} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, bairro: event.target.value })}>
@@ -364,9 +364,9 @@ function App() {
                   placeholder="Buscar endereço"
                 />
               </label>
-            </section>
-            <section className="equipment-location-filters" aria-label="Posição de equipamentos móveis">
-              <h3>Posição dos equipamentos móveis</h3>
+            </details>
+            <details className="equipment-filter-accordion equipment-location-filters" aria-label="Posição de equipamentos móveis">
+              <summary>Posição dos equipamentos móveis</summary>
               <label className="equipment-location-control">
                 <span>Exibir no mapa</span>
                 <select value={posicaoMovel} onChange={(event) => setPosicaoMovel(event.target.value as 'gps' | 'fixa')}>
@@ -374,7 +374,7 @@ function App() {
                   <option value="fixa">Posição fixa cadastrada</option>
                 </select>
               </label>
-            </section>
+            </details>
             <section className="equipment-display-options" aria-label="Opções de exibição">
               <h3>Opções de exibição</h3>
               <label className="equipment-display-option">
@@ -427,8 +427,7 @@ function App() {
             detalhesId={detalhesId}
             onVisualizar={visualizarEquipamento}
             onAlternarSelecao={alternarSelecao}
-            onAlternarTodos={(selecionar) => {
-              const idsVisiveis = pontosFiltrados.map((ponto) => ponto.id);
+            onAlternarTodos={(selecionar, idsVisiveis) => {
               setSelecionadosIds((selecionados) =>
                 selecionar
                   ? selecionados.filter((id) => !idsVisiveis.includes(id)).concat(idsVisiveis)

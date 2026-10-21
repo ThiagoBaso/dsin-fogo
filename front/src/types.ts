@@ -49,6 +49,19 @@ export interface AtributoEquipamento {
   valor: string | number | boolean | null;
 }
 
+export interface OcorrenciaEquipamento {
+  id: number;
+  tipo: string;
+  gravidade: 'baixa' | 'media' | 'alta' | 'critica';
+  status: 'aberta' | 'em_atendimento' | 'resolvida' | 'cancelada';
+  descricao: string | null;
+  ocorrida_em: string;
+  logradouro: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+}
+
 export interface DetalhesEquipamento {
   id: number;
   tipo_id: number;

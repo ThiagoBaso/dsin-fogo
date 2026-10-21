@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Ponto } from '../types';
 import { equipmentSituations } from '../equipmentCatalog';
 
@@ -14,20 +15,38 @@ function ItemList({
   detalhesId: number | null;
   onVisualizar: (ponto: Ponto) => void;
   onAlternarSelecao: (pontoId: number) => void;
-  onAlternarTodos: (selecionar: boolean) => void;
+  onAlternarTodos: (selecionar: boolean, idsVisiveis: number[]) => void;
 }) {
-  const todosSelecionados = pontos.length > 0 && pontos.every((ponto) => selecionadosIds.includes(ponto.id));
+  const [buscaNome, setBuscaNome] = useState('');
+  const termoBusca = buscaNome.trim().toLocaleLowerCase('pt-BR');
+  const pontosVisiveis = termoBusca
+    ? pontos.filter((ponto) => ponto.nome.toLocaleLowerCase('pt-BR').includes(termoBusca))
+    : pontos;
+  const todosSelecionados = pontosVisiveis.length > 0
+    && pontosVisiveis.every((ponto) => selecionadosIds.includes(ponto.id));
 
   return (
     <section className="item-list" aria-label="Lista de itens">
       <div className="item-list-header">
         <h2>Itens</h2>
-        <button type="button" onClick={() => onAlternarTodos(!todosSelecionados)} disabled={pontos.length === 0}>
+        <input
+          className="item-list-search"
+          type="search"
+          aria-label="Buscar equipamento pelo nome"
+          placeholder="Buscar pelo nome"
+          value={buscaNome}
+          onChange={(event) => setBuscaNome(event.target.value)}
+        />
+        <button
+          type="button"
+          onClick={() => onAlternarTodos(!todosSelecionados, pontosVisiveis.map((ponto) => ponto.id))}
+          disabled={pontosVisiveis.length === 0}
+        >
           {todosSelecionados ? 'Desmarcar tudo' : 'Selecionar tudo'}
         </button>
       </div>
       <ul>
-        {pontos.map((ponto) => {
+        {pontosVisiveis.map((ponto) => {
           const selecionado = selecionadosIds.includes(ponto.id);
           const emVisualizacao = detalhesId === ponto.id;
           const classes = [selecionado ? 'selected' : '', emVisualizacao ? 'viewing' : '']
@@ -60,6 +79,7 @@ function ItemList({
           );
         })}
       </ul>
+      {pontosVisiveis.length === 0 && <p className="item-list-empty">Nenhum equipamento encontrado.</p>}
     </section>
   );
 }
