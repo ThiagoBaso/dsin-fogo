@@ -1,20 +1,55 @@
 import { Ponto } from '../types';
 import { equipmentSituations } from '../equipmentCatalog';
 
-function ItemList({ pontos, selecionadoId, onSelecionar }: { pontos: Ponto[]; selecionadoId: number | null; onSelecionar: (ponto: Ponto) => void }) {
+function ItemList({
+  pontos,
+  selecionadosIds,
+  detalhesId,
+  onVisualizar,
+  onAlternarSelecao,
+}: {
+  pontos: Ponto[];
+  selecionadosIds: number[];
+  detalhesId: number | null;
+  onVisualizar: (ponto: Ponto) => void;
+  onAlternarSelecao: (pontoId: number) => void;
+}) {
   return (
     <section className="item-list" aria-label="Lista de itens">
       <h2>Itens</h2>
       <ul>
-        {pontos.map((ponto) => (
-          <li key={ponto.id} className={selecionadoId === ponto.id ? 'selected' : ''}>
-            <button type="button" className="item-select" aria-pressed={selecionadoId === ponto.id} onClick={() => onSelecionar(ponto)}>
-              <strong>{ponto.nome}</strong>
-              <p>Situação: {equipmentSituations[ponto.situacao_id]?.label || ponto.situacao}</p>
-              <p>Coordenadas: {ponto.latitude}, {ponto.longitude}</p>
-            </button>
-          </li>
-        ))}
+        {pontos.map((ponto) => {
+          const selecionado = selecionadosIds.includes(ponto.id);
+          const emVisualizacao = detalhesId === ponto.id;
+          const classes = [selecionado ? 'selected' : '', emVisualizacao ? 'viewing' : '']
+            .filter(Boolean)
+            .join(' ');
+
+          return (
+            <li key={ponto.id} className={classes}>
+              <div className="item-row">
+                <label className="item-selection-control">
+                  <input
+                    type="checkbox"
+                    aria-label={`Selecionar ${ponto.nome}`}
+                    checked={selecionado}
+                    onChange={() => onAlternarSelecao(ponto.id)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="item-select"
+                  aria-current={emVisualizacao ? 'true' : undefined}
+                  onClick={() => onVisualizar(ponto)}
+                >
+                  <strong>{ponto.nome}</strong>
+                  <p>Situação: {equipmentSituations[ponto.situacao_id]?.label || ponto.situacao}</p>
+                  <p>Coordenadas: {ponto.latitude}, {ponto.longitude}</p>
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

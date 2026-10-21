@@ -5,10 +5,22 @@ export interface Ponto {
   nome: string;
   tipo_id: number;
   tipo: string;
+  mobilidade: 'fixo' | 'movel';
   situacao_id: number;
   situacao: string;
   latitude: number;
   longitude: number;
+  latitude_fixa: number | null;
+  longitude_fixa: number | null;
+  latitude_gps: number | null;
+  longitude_gps: number | null;
+  logradouro: string | null;
+  referencia: string | null;
+  bairro: string | null;
+  regiao: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
   status: 'ativo' | 'inativo';
 }
 

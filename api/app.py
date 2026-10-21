@@ -65,15 +65,24 @@ def list_equipamentos():
                CONCAT(t.nome, ' ', e.numero_serie) AS nome,
                t.id_tipo AS tipo_id,
                t.nome AS tipo,
+               t.mobilidade,
                s.id_situacao AS situacao_id,
                s.nome AS situacao,
                CAST(COALESCE(pos.latitude, l.latitude) AS DOUBLE) AS latitude,
                CAST(COALESCE(pos.longitude, l.longitude) AS DOUBLE) AS longitude,
+               CAST(l.latitude AS DOUBLE) AS latitude_fixa,
+               CAST(l.longitude AS DOUBLE) AS longitude_fixa,
+               CAST(pos.latitude AS DOUBLE) AS latitude_gps,
+               CAST(pos.longitude AS DOUBLE) AS longitude_gps,
+               l.logradouro, l.referencia, l.cep, l.cidade, l.uf,
+               b.nome AS bairro, r.nome AS regiao,
                CASE WHEN s.disponivel = 1 THEN 'ativo' ELSE 'inativo' END AS status
         FROM equipamentos e
         JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
         JOIN situacoes_equipamento s ON s.id_situacao = e.id_situacao
         LEFT JOIN localizacoes l ON l.id_localizacao = e.id_localizacao
+        LEFT JOIN bairros b ON b.id_bairro = l.id_bairro
+        LEFT JOIN regioes r ON r.id_regiao = b.id_regiao
         LEFT JOIN posicoes_equipamento pos ON pos.id_posicao = (
             SELECT p.id_posicao
             FROM posicoes_equipamento p

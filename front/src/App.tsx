@@ -12,6 +12,22 @@ const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, 
   label: situation.label,
 }));
 
+type LocationFilters = {
+  bairro: string;
+  regiao: string;
+  cidade: string;
+  uf: string;
+  busca: string;
+};
+
+const emptyLocationFilters: LocationFilters = {
+  bairro: '',
+  regiao: '',
+  cidade: '',
+  uf: '',
+  busca: '',
+};
+
 function CheckboxFilterGroup({
   title,
   options,
@@ -67,21 +83,99 @@ function App() {
   const [situacoesAplicadas, setSituacoesAplicadas] = useState<number[]>(
     equipmentSituationOptions.map((situation) => situation.id),
   );
+  const [selecionadosIds, setSelecionadosIds] = useState<number[]>([]);
+  const [detalhesId, setDetalhesId] = useState<number | null>(null);
+  const [exibirApenasSelecionados, setExibirApenasSelecionados] = useState(false);
+  const [permitirMultisselecao, setPermitirMultisselecao] = useState(false);
+  const [filtrosLocalizacao, setFiltrosLocalizacao] = useState<LocationFilters>(emptyLocationFilters);
+  const [localizacaoAplicada, setLocalizacaoAplicada] = useState<LocationFilters>(emptyLocationFilters);
+  const [posicaoMovel, setPosicaoMovel] = useState<'gps' | 'fixa'>('gps');
   const [painelExpandido, setPainelExpandido] = useState(true);
-  const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
   const painelDetalhes = useRef<HTMLElement>(null);
 
-  const pontosFiltrados = useMemo(
-    () => pontos.filter((ponto) => (
-      tiposAplicados.includes(ponto.tipo_id) && situacoesAplicadas.includes(ponto.situacao_id)
-    )),
-    [pontos, tiposAplicados, situacoesAplicadas],
-  );
-  const pontoSelecionado = pontosFiltrados.find((ponto) => ponto.id === selecionadoId) || null;
+  const opcoesLocalizacao = useMemo(() => {
+    const valores = (campo: 'bairro' | 'regiao' | 'cidade' | 'uf') => Array.from(new Set(
+      pontos.map((ponto) => ponto[campo]).filter((valor): valor is string => Boolean(valor)),
+    )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
-  function selecionarEquipamento(ponto: Ponto) {
-    setSelecionadoId(ponto.id);
+    return {
+      bairros: valores('bairro'),
+      regioes: valores('regiao'),
+      cidades: valores('cidade'),
+      ufs: valores('uf'),
+    };
+  }, [pontos]);
+  const pontosFiltrados = useMemo(() => {
+    const busca = localizacaoAplicada.busca.trim().toLocaleLowerCase('pt-BR');
+
+    return pontos.filter((ponto) => {
+      const correspondeLocalizacao = (!localizacaoAplicada.bairro || ponto.bairro === localizacaoAplicada.bairro)
+        && (!localizacaoAplicada.regiao || ponto.regiao === localizacaoAplicada.regiao)
+        && (!localizacaoAplicada.cidade || ponto.cidade === localizacaoAplicada.cidade)
+        && (!localizacaoAplicada.uf || ponto.uf === localizacaoAplicada.uf)
+        && (!busca || [ponto.logradouro, ponto.referencia, ponto.cep]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase('pt-BR')
+          .includes(busca));
+
+      return tiposAplicados.includes(ponto.tipo_id)
+        && situacoesAplicadas.includes(ponto.situacao_id)
+        && correspondeLocalizacao;
+    }).map((ponto) => {
+      if (ponto.mobilidade !== 'movel') return ponto;
+      const latitude = posicaoMovel === 'fixa'
+        ? ponto.latitude_fixa ?? ponto.latitude
+        : ponto.latitude_gps ?? ponto.latitude_fixa ?? ponto.latitude;
+      const longitude = posicaoMovel === 'fixa'
+        ? ponto.longitude_fixa ?? ponto.longitude
+        : ponto.longitude_gps ?? ponto.longitude_fixa ?? ponto.longitude;
+      return { ...ponto, latitude, longitude };
+    });
+  }, [pontos, tiposAplicados, situacoesAplicadas, localizacaoAplicada, posicaoMovel]);
+  const pontosMapa = exibirApenasSelecionados
+    ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
+    : pontosFiltrados;
+  const pontoDetalhes = pontos.find((ponto) => ponto.id === detalhesId) || null;
+
+  function visualizarEquipamento(ponto: Ponto) {
+    setDetalhesId(ponto.id);
     painelDetalhes.current?.scrollTo({ top: 0 });
+  }
+
+  function alternarSelecao(pontoId: number) {
+    setSelecionadosIds((selecionados) => {
+      if (selecionados.includes(pontoId)) {
+        return selecionados.filter((id) => id !== pontoId);
+      }
+      return permitirMultisselecao ? [...selecionados, pontoId] : [pontoId];
+    });
+  }
+
+  function alterarMultisselecao(permitida: boolean) {
+    setPermitirMultisselecao(permitida);
+    if (!permitida) setSelecionadosIds((selecionados) => selecionados.slice(-1));
+  }
+
+  function resetarFiltros() {
+    const tiposPadrao = [1];
+    const situacoesPadrao = equipmentSituationOptions.map((situation) => situation.id);
+
+    setTiposSelecionados(tiposPadrao);
+    setTiposAplicados(tiposPadrao);
+    setSituacoesSelecionadas(situacoesPadrao);
+    setSituacoesAplicadas(situacoesPadrao);
+    setFiltrosLocalizacao(emptyLocationFilters);
+    setLocalizacaoAplicada(emptyLocationFilters);
+    setExibirApenasSelecionados(false);
+    setPermitirMultisselecao(false);
+    setPosicaoMovel('gps');
+    setSelecionadosIds((selecionados) => selecionados.slice(-1));
+
+    const equipamentoDetalhado = pontos.find((ponto) => ponto.id === detalhesId);
+    if (equipamentoDetalhado && !tiposPadrao.includes(equipamentoDetalhado.tipo_id)) {
+      setDetalhesId(null);
+    }
   }
 
   useEffect(() => {
@@ -115,16 +209,23 @@ function App() {
             event.preventDefault();
             setTiposAplicados(tiposSelecionados);
             setSituacoesAplicadas(situacoesSelecionadas);
-            if (pontoSelecionado && (
-              !tiposSelecionados.includes(pontoSelecionado.tipo_id)
-              || !situacoesSelecionadas.includes(pontoSelecionado.situacao_id)
+            setLocalizacaoAplicada(filtrosLocalizacao);
+            const equipamentoDetalhado = pontos.find((ponto) => ponto.id === detalhesId);
+            if (equipamentoDetalhado && (
+              !tiposSelecionados.includes(equipamentoDetalhado.tipo_id)
+              || !situacoesSelecionadas.includes(equipamentoDetalhado.situacao_id)
             )) {
-              setSelecionadoId(null);
+              setDetalhesId(null);
             }
           }}
         >
           <div className="equipment-filters-content">
-            <h2>Filtros</h2>
+            <div className="equipment-filters-heading">
+              <h2>Filtros</h2>
+              <button type="button" className="equipment-filters-reset" onClick={resetarFiltros}>
+                Resetar
+              </button>
+            </div>
             <CheckboxFilterGroup
               title="Tipo de equipamento"
               options={equipmentTypes}
@@ -137,6 +238,75 @@ function App() {
               selectedIds={situacoesSelecionadas}
               onChange={setSituacoesSelecionadas}
             />
+            <section className="equipment-location-filters" aria-label="Filtros de localização">
+              <h3>Localização</h3>
+              <label className="equipment-location-control">
+                <span>Bairro</span>
+                <select value={filtrosLocalizacao.bairro} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, bairro: event.target.value })}>
+                  <option value="">Todos os bairros</option>
+                  {opcoesLocalizacao.bairros.map((bairro) => <option key={bairro} value={bairro}>{bairro}</option>)}
+                </select>
+              </label>
+              <label className="equipment-location-control">
+                <span>Região</span>
+                <select value={filtrosLocalizacao.regiao} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, regiao: event.target.value })}>
+                  <option value="">Todas as regiões</option>
+                  {opcoesLocalizacao.regioes.map((regiao) => <option key={regiao} value={regiao}>{regiao}</option>)}
+                </select>
+              </label>
+              <label className="equipment-location-control">
+                <span>Cidade</span>
+                <select value={filtrosLocalizacao.cidade} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, cidade: event.target.value })}>
+                  <option value="">Todas as cidades</option>
+                  {opcoesLocalizacao.cidades.map((cidade) => <option key={cidade} value={cidade}>{cidade}</option>)}
+                </select>
+              </label>
+              <label className="equipment-location-control">
+                <span>UF</span>
+                <select value={filtrosLocalizacao.uf} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, uf: event.target.value })}>
+                  <option value="">Todas as UFs</option>
+                  {opcoesLocalizacao.ufs.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+                </select>
+              </label>
+              <label className="equipment-location-control">
+                <span>Logradouro, referência ou CEP</span>
+                <input
+                  type="search"
+                  value={filtrosLocalizacao.busca}
+                  onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, busca: event.target.value })}
+                  placeholder="Buscar endereço"
+                />
+              </label>
+            </section>
+            <section className="equipment-location-filters" aria-label="Posição de equipamentos móveis">
+              <h3>Posição dos equipamentos móveis</h3>
+              <label className="equipment-location-control">
+                <span>Exibir no mapa</span>
+                <select value={posicaoMovel} onChange={(event) => setPosicaoMovel(event.target.value as 'gps' | 'fixa')}>
+                  <option value="gps">Última posição no GPS</option>
+                  <option value="fixa">Posição fixa cadastrada</option>
+                </select>
+              </label>
+            </section>
+            <section className="equipment-display-options" aria-label="Opções de exibição">
+              <h3>Opções de exibição</h3>
+              <label className="equipment-display-option">
+                <input
+                  type="checkbox"
+                  checked={exibirApenasSelecionados}
+                  onChange={(event) => setExibirApenasSelecionados(event.target.checked)}
+                />
+                <span>Exibir apenas selecionados</span>
+              </label>
+              <label className="equipment-display-option">
+                <input
+                  type="checkbox"
+                  checked={permitirMultisselecao}
+                  onChange={(event) => alterarMultisselecao(event.target.checked)}
+                />
+                <span>Permitir multisseleção</span>
+              </label>
+            </section>
           </div>
           <div className="equipment-filters-actions">
             <button type="submit">Atualizar</button>
@@ -161,12 +331,20 @@ function App() {
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
-          <Map pontos={pontosFiltrados} ativo={abaAtiva === 'mapa'} onSelecionar={selecionarEquipamento} />
+          <Map pontos={pontosMapa} ativo={abaAtiva === 'mapa'} onSelecionar={visualizarEquipamento} />
         </div>
-        {abaAtiva === 'lista' && <ItemList pontos={pontosFiltrados} selecionadoId={selecionadoId} onSelecionar={selecionarEquipamento} />}
+        {abaAtiva === 'lista' && (
+          <ItemList
+            pontos={pontosFiltrados}
+            selecionadosIds={selecionadosIds}
+            detalhesId={detalhesId}
+            onVisualizar={visualizarEquipamento}
+            onAlternarSelecao={alternarSelecao}
+          />
+        )}
       </div>
       <aside className='rigth-painel' aria-label="Informações do equipamento" ref={painelDetalhes}>
-        <EquipmentDetails ponto={pontoSelecionado} onClose={() => setSelecionadoId(null)} />
+        <EquipmentDetails ponto={pontoDetalhes} onClose={() => setDetalhesId(null)} />
       </aside>
     </div>
   );
