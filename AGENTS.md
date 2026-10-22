@@ -144,3 +144,11 @@ Responda de forma breve e verificável, usando esta ordem:
 3. **Pendências:** limitações, riscos ou verificações não realizadas, sem afirmar que tudo está correto quando não foi verificado.
 
 O objetivo é entregar interfaces bem acabadas e aplicações estáveis, não apenas gerar código rapidamente.
+
+## 10. Cadastros e dados de demonstração
+
+- Todo novo cadastro de equipamento deve ser completo e coerente com os registros existentes; não basta inserir uma linha básica na tabela `equipamentos`.
+- Cadastros de demonstração devem usar localizações válidas e variadas, atributos específicos do tipo, histórico de situação e ocorrências vinculadas.
+- Equipamentos móveis de demonstração também devem ter viagens e posições GPS coerentes, relacionadas ao equipamento e à sua localização cadastrada.
+- Ao adicionar dados, mantenha schema, seed, gerador, migrações, API e exibição alinhados. Garanta chaves estrangeiras e evite posições compartilhadas usadas apenas como placeholder.
+- Antes de concluir, confira que cada cadastro novo possui os dados relacionados exigidos para seu tipo e que migrações existentes recebem o mesmo tratamento que bancos novos.

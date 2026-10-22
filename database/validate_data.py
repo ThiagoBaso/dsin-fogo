@@ -91,7 +91,7 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     def check(label, ok, detail):
         checks.append((label, bool(ok), detail))
 
-    required = {"equipamentos": 500, "agentes": 100, "localizacoes": 300, "viagens": 240,
+    required = {"equipamentos": 532, "agentes": 100, "localizacoes": 300, "viagens": 240,
                 "posicoes_equipamento": 28800, "manutencoes": 800, "ocorrencias": 1000, "alertas": 250}
     for table, minimum in required.items():
         check(f"{table} >= {minimum}", len(tables.get(table, [])) >= minimum, str(len(tables.get(table, []))))
@@ -102,13 +102,40 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     positions_by_trip = defaultdict(list)
     for row in tables["posicoes_equipamento"]:
         if row["id_viagem"] is not None: positions_by_trip[row["id_viagem"]].append(row)
-    check("60 equipamentos móveis", len(mobile) == 60, str(len(mobile)))
-    check("240 trips (180 completed and 60 active)", len(trips) == 240 and all(r["id_equipamento"] in mobile for r in trips.values()), str(len(trips)))
-    check("120+ posições por viagem", len(positions_by_trip) == 240 and all(len(v) >= 120 for v in positions_by_trip.values()),
+    check("92 equipamentos moveis", len(mobile) == 92, str(len(mobile)))
+    service_counts = {type_id: sum(1 for row in eq.values() if row["id_tipo"] == type_id) for type_id in (12, 13, 14, 15)}
+    check("8 equipamentos por novo tipo", all(count == 8 for count in service_counts.values()), str(service_counts))
+    service_ids = {eid for eid, row in eq.items() if row["id_tipo"] in (12, 13, 14, 15)}
+    attrs_per_equipment = defaultdict(int)
+    for value in tables.get("valores_atributo", []):
+        if value["id_equipamento"] in service_ids:
+            attrs_per_equipment[value["id_equipamento"]] += 1
+    check("atributos especificos em todos os novos tipos", all(attrs_per_equipment[eid] >= 2 for eid in service_ids),
+          f"{sum(attrs_per_equipment[eid] >= 2 for eid in service_ids)}/{len(service_ids)} equipamentos completos")
+    occurrences_per_equipment = defaultdict(int)
+    for occurrence in tables.get("ocorrencias", []):
+        if occurrence["id_equipamento"] in service_ids:
+            occurrences_per_equipment[occurrence["id_equipamento"]] += 1
+    check("ao menos 3 ocorrencias por equipamento desses tipos",
+          all(occurrences_per_equipment[eid] >= 3 for eid in service_ids),
+          f"{sum(occurrences_per_equipment[eid] >= 3 for eid in service_ids)}/{len(service_ids)} equipamentos completos")
+    trips_per_equipment = defaultdict(int)
+    for trip in trips.values():
+        if trip["id_equipamento"] in service_ids:
+            trips_per_equipment[trip["id_equipamento"]] += 1
+    check("historico de viagens para todos os equipamentos desses tipos",
+          all(trips_per_equipment[eid] >= 4 for eid in service_ids),
+          f"{sum(trips_per_equipment[eid] >= 4 for eid in service_ids)}/{len(service_ids)} equipamentos completos")
+    new_service_locations = [row["id_localizacao"] for eid, row in eq.items() if eid >= 501 and row["id_tipo"] in (12, 13, 14, 15)]
+    check("localizacoes variadas nos 32 cadastros adicionados",
+          len(new_service_locations) == 32 and len(set(new_service_locations)) == 32,
+          f"{len(set(new_service_locations))}/{len(new_service_locations)} localizacoes distintas")
+    check("viagens vinculadas a equipamentos móveis", len(trips) >= 240 and all(r["id_equipamento"] in mobile for r in trips.values()), str(len(trips)))
+    check("120+ posições por viagem", len(positions_by_trip) == len(trips) and all(len(v) >= 120 for v in positions_by_trip.values()),
           f"{len(positions_by_trip)} viagens; mínimo {min(map(len, positions_by_trip.values()), default=0)}")
 
     active_trips = [trip for trip in trips.values() if trip["situacao"] == "em_andamento"]
-    check("60 active simulated trips", len(active_trips) == 60 and all(trip["fim_em"] is None for trip in active_trips), str(len(active_trips)))
+    check("ao menos 60 viagens ativas", len(active_trips) >= 60 and all(trip["fim_em"] is None for trip in active_trips), str(len(active_trips)))
     location_by_id = {row["id_localizacao"]: row for row in tables["localizacoes"]}
     equipment_by_id = {row["id_equipamento"]: row for row in tables["equipamentos"]}
     completed_by_equipment = {}
@@ -199,10 +226,17 @@ def main() -> int:
         ok = predicate(result)
         checks.append((label, ok, result, expected))
 
-    check("equipamentos", "SELECT COUNT(*) FROM equipamentos", lambda n: n >= 500, ">= 500")
+    check("equipamentos", "SELECT COUNT(*) FROM equipamentos", lambda n: n >= 532, ">= 532")
     check("agentes", "SELECT COUNT(*) FROM agentes", lambda n: n >= 100, ">= 100")
     check("localizacoes", "SELECT COUNT(*) FROM localizacoes", lambda n: n >= 300, ">= 300")
-    check("equipamentos móveis", "SELECT COUNT(*) FROM equipamentos e JOIN tipos_equipamento t USING(id_tipo) WHERE t.mobilidade='movel'", lambda n: n >= 60, ">= 60")
+    check("equipamentos móveis", "SELECT COUNT(*) FROM equipamentos e JOIN tipos_equipamento t USING(id_tipo) WHERE t.mobilidade='movel'", lambda n: n >= 92, ">= 92")
+    for type_id, label in ((12, "táxi"), (13, "mototáxi"), (14, "transporte escolar"), (15, "fiscalização autônoma")):
+        check(f"equipamentos {label}", f"SELECT COUNT(*) FROM equipamentos WHERE id_tipo={type_id}", lambda n: n >= 8, ">= 8")
+    check("atributos nos 32 equipamentos dos novos tipos", "SELECT COUNT(*) FROM equipamentos e WHERE e.id_tipo IN (12,13,14,15) AND (SELECT COUNT(*) FROM valores_atributo v WHERE v.id_equipamento=e.id_equipamento) >= 2", lambda n: n >= 32, ">= 32")
+    check("ocorrencias nos 32 equipamentos dos novos tipos", "SELECT COUNT(*) FROM equipamentos e WHERE e.id_tipo IN (12,13,14,15) AND (SELECT COUNT(*) FROM ocorrencias o WHERE o.id_equipamento=e.id_equipamento) >= 3", lambda n: n >= 32, ">= 32")
+    check("viagens nos 32 equipamentos dos novos tipos", "SELECT COUNT(*) FROM equipamentos e WHERE e.id_tipo IN (12,13,14,15) AND (SELECT COUNT(*) FROM viagens v WHERE v.id_equipamento=e.id_equipamento) >= 4", lambda n: n >= 32, ">= 32")
+    check("rotas completas nos 32 equipamentos dos novos tipos", "SELECT COUNT(*) FROM equipamentos e WHERE e.id_tipo IN (12,13,14,15) AND (SELECT COUNT(*) FROM viagens v WHERE v.id_equipamento=e.id_equipamento AND (SELECT COUNT(*) FROM posicoes_equipamento p WHERE p.id_viagem=v.id_viagem) >= 120) >= 4", lambda n: n >= 32, ">= 32")
+    check("bases distintas nos novos tipos", "SELECT COUNT(DISTINCT id_localizacao) FROM equipamentos WHERE id_tipo IN (12,13,14,15)", lambda n: n >= 32, ">= 32")
     check("viagens", "SELECT COUNT(*) FROM viagens", lambda n: n >= 240, ">= 240")
     check("viagens ativas", "SELECT COUNT(*) FROM viagens WHERE situacao='em_andamento' AND fim_em IS NULL", lambda n: n >= 60, ">= 60")
     check("posições GPS", "SELECT COUNT(*) FROM posicoes_equipamento WHERE id_viagem IS NOT NULL", lambda n: n >= 28800, ">= 28800")

@@ -1001,6 +1001,7 @@
   .map-bar {
     min-height: 54px;
     padding: 8px 10px;
+    gap: 6px;
   }
 
   .map-bar-switch {

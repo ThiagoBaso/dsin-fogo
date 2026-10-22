@@ -1,5 +1,5 @@
 
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -8,14 +8,25 @@ import {
   Tooltip,
   Polyline,
   CircleMarker,
+  GeoJSON,
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
 import { equipmentIcons, equipmentSituations } from "../equipmentCatalog";
+import bairrosDemo from "../data/bairros-demo.json";
 import "leaflet/dist/leaflet.css";
 import "./Map.css";
 
 const ponto_inicial = [-22.217, -49.950];
+
+function configurarTooltipSetor(feature, layer, selecionarSetor) {
+  const nome = feature?.properties?.nome || "Setor demonstrativo";
+  layer.bindTooltip(`${nome} · limite aproximado`, {
+    sticky: true,
+    className: "neighborhood-boundary-tooltip",
+  });
+  layer.on("click", () => selecionarSetor(feature.properties.id));
+}
 
 function AjustarTamanhoMapa({ ativo }) {
   const map = useMap();
@@ -53,7 +64,9 @@ function criarIcone(ponto) {
   return marcadores.get(chave);
 }
 
-export default function MapaMarilia({ pontos, rotas = [], ativo, onSelecionar }) {
+export default function MapaMarilia({ pontos, rotas = [], ativo, onSelecionar, exibirContornoBairros = false }) {
+  const [setorSelecionadoId, setSetorSelecionadoId] = useState(null);
+
   return (
       <MapContainer
         center={ponto_inicial}
@@ -65,6 +78,28 @@ export default function MapaMarilia({ pontos, rotas = [], ativo, onSelecionar })
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OpenStreetMap contributors'
         />
+
+        {exibirContornoBairros && (
+          <GeoJSON
+            key={`bairros-${setorSelecionadoId ?? "nenhum"}`}
+            data={bairrosDemo}
+            style={(feature) => {
+              const selecionado = feature?.properties?.id === setorSelecionadoId;
+              return {
+                color: selecionado ? "#1e2b3a" : "#3c4548",
+                weight: selecionado ? 3 : 1.5,
+                opacity: 0.95,
+                fillColor: "#fecc00",
+                fillOpacity: selecionado ? 0.28 : 0.035,
+              };
+            }}
+            onEachFeature={(feature, layer) => configurarTooltipSetor(
+              feature,
+              layer,
+              (id) => setSetorSelecionadoId((atual) => atual === id ? null : id),
+            )}
+          />
+        )}
 
         {rotas.filter((rota) => rota.posicoes.length > 1).map((rota) => {
           const caminho = rota.posicoes.map((posicao) => [posicao.latitude, posicao.longitude]);

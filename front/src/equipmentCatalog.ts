@@ -11,6 +11,10 @@ export const equipmentTypes = [
   { id: 9, label: 'Viatura policial' },
   { id: 10, label: 'Veículo da Guarda Municipal' },
   { id: 11, label: 'Veículo de fiscalização' },
+  { id: 12, label: 'Táxi' },
+  { id: 13, label: 'Mototáxi' },
+  { id: 14, label: 'Transporte escolar' },
+  { id: 15, label: 'Veículo autônomo de fiscalização de estacionamento' },
 ];
 
 export const equipmentIcons: Record<number, string> = {
@@ -25,6 +29,10 @@ export const equipmentIcons: Record<number, string> = {
   9: 'police',
   10: 'municipal',
   11: 'car',
+  12: 'car',
+  13: 'motorcycle',
+  14: 'car',
+  15: 'car',
 };
 
 export const equipmentSituations: Record<number, { label: string; symbol: string; className: string }> = {

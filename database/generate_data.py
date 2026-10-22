@@ -126,16 +126,20 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         ("Cancela automatizada", "fixo", "cancela"), ("Totem de estacionamento", "fixo", "parking"), ("Balança de caminhões", "fixo", "scale"),
         ("Patinete elétrico", "movel", "scooter"), ("Motocicleta", "movel", "motorcycle"), ("Viatura policial", "movel", "police"),
         ("Veículo da Guarda Municipal", "movel", "municipal"), ("Veículo de fiscalização", "movel", "car"),
+        ("Táxi", "movel", "car"), ("Mototáxi", "movel", "motorcycle"), ("Transporte escolar", "movel", "car"),
+        ("Veículo autônomo de fiscalização de estacionamento", "movel", "car"),
     ]
     add("tipos_equipamento", ["id_tipo", "nome", "mobilidade", "icone_mapa"], [(i + 1, *t) for i, t in enumerate(types)])
     states = [(1, "operacional", True), (2, "indisponível", False), (3, "desativado", False), (4, "furtado", False), (5, "em manutenção", False)]
     add("situacoes_equipamento", ["id_situacao", "nome", "disponivel"], states)
-    mobile_ids = [2, 7, 8, 9, 10, 11]
+    mobile_ids = [2, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     equipment_rows = []
-    type_order = [2, 7, 8, 9, 10, 11] * 10  # exactly 60 mobile units
+    type_order = [2, 7, 8, 9, 10, 11] * 10  # 60 original mobile units
     fixed_types = [1, 3, 4, 5, 6]
     type_order += [rng.choice(fixed_types) for _ in range(440)]
     rng.shuffle(type_order)
+    # Add eight complete mobile units for each newly represented service.
+    type_order += [new_type for new_type in (12, 13, 14, 15) for _ in range(8)]
     equipment_type = {}
     for i, type_id in enumerate(type_order, 1):
         equipment_type[i] = type_id
@@ -153,7 +157,11 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
                  (4, "largura_m", "numero", "m"), (5, "vagas_monitoradas", "numero", "vagas"),
                  (6, "capacidade_ton", "numero", "t"), (7, "autonomia_km", "numero", "km"),
                  (8, "cilindrada_cc", "numero", "cc"), (9, "tracao", "texto", None),
-                 (10, "tracao", "texto", None), (11, "tracao", "texto", None)]
+                 (10, "tracao", "texto", None), (11, "tracao", "texto", None),
+                 (12, "categoria_servico", "texto", None), (12, "capacidade_passageiros", "numero", "pessoas"),
+                 (13, "cilindrada_cc", "numero", "cc"), (13, "capacete_disponivel", "booleano", None),
+                 (14, "capacidade_alunos", "numero", "pessoas"), (14, "acessibilidade", "booleano", None),
+                 (15, "leitura_placas", "booleano", None), (15, "autonomia_km", "numero", "km")]
     add("atributos_tipo", ["id_atributo", "id_tipo", "nome", "tipo_valor", "unidade", "obrigatorio"], [(i + 1, *a, True) for i, a in enumerate(attr_defs)])
     attr_by_type = {}
     for i, a in enumerate(attr_defs, 1):
@@ -164,7 +172,11 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             definition = attr_defs[attr_id - 1]
             name, kind = definition[1], definition[2]
             if name == "limite_velocidade": value = (None, rng.choice([40, 50, 60, 80]), None)
-            elif name == "modalidade": value = (rng.choice(["velocidade", "avanço de sinal", "faixa exclusiva"]), None, None)
+            elif name == "modalidade":
+                modalidade = rng.choice(["velocidade", "avanço de sinal", "faixa exclusiva"])
+                primeiro_radar = next(i for i, tipo in equipment_type.items() if tipo in (1, 2))
+                value = ("retorno proibido" if equip_id == primeiro_radar else modalidade, None, None)
+            elif name == "categoria_servico": value = (rng.choice(["convencional", "executivo", "acessÃ­vel"]), None, None)
             elif name == "resolucao": value = (rng.choice(["1080p", "4K", "5MP"]), None, None)
             elif kind == "booleano": value = (None, None, rng.choice([True, False]))
             elif kind == "numero": value = (None, rng.randint(5, 120), None)
@@ -225,7 +237,8 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
                     at = start + timedelta(seconds=(duration_seconds * ix) // (len(points) - 1))
                     positions.append((pos_id, equip_id, trip_id, round(lat, 7), round(lon, 7), round(speed * rng.uniform(.75, 1.2), 2), at))
                 latest_positions[equip_id] = points[-1]
-        if len(trip_rows) != 180 or len(positions) < 21600:
+        expected_completed_trips = len(mobile_equipment) * 3
+        if len(trip_rows) != expected_completed_trips or len(positions) < expected_completed_trips * 120:
             raise AssertionError("Trip/position minimums were not met")
 
         equipment_by_id = {row[0]: row for row in equipment_rows}
@@ -254,11 +267,29 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     add("posicoes_equipamento", ["id_posicao", "id_equipamento", "id_viagem", "latitude", "longitude", "velocidade_kmh", "registrado_em"], positions)
 
     occurrences = []
-    for i in range(1, 1001):
+    equipment_by_id = {row[0]: row for row in equipment_rows}
+    priority_equipment_ids = [i for i, tid in equipment_type.items() if tid in (12, 13, 14, 15)]
+    for equip_id in priority_equipment_ids:
+        equipment = equipment_by_id[equip_id]
+        for _ in range(3):
+            occurrence_id = len(occurrences) + 1
+            occurred = NOW - timedelta(days=rng.randint(1, 365), hours=rng.randint(0, 23), minutes=rng.randint(0, 59))
+            occurrences.append((occurrence_id, equipment[3], equipment[2], equip_id,
+                                rng.choice(["tr\u00e2nsito", "falha de equipamento", "estacionamento", "seguran\u00e7a", "obstru\u00e7\u00e3o"]),
+                                rng.choices(["baixa", "media", "alta", "critica"], [35, 40, 20, 5])[0],
+                                rng.choice(["aberta", "em_atendimento", "resolvida", "cancelada"]),
+                                "Evento fict\u00edcio vinculado ao equipamento para demonstra\u00e7\u00e3o.", occurred))
+    for _ in range(1000 - len(occurrences)):
+        occurrence_id = len(occurrences) + 1
         hour = rng.choices(range(24), [1,1,1,1,1,2,3,5,7,7,6,5,5,5,5,5,6,8,9,9,7,5,3,2])[0]
         day = rng.randint(0, 365)
         occurred = NOW - timedelta(days=day, hours=hour, minutes=rng.randint(0, 59))
-        occurrences.append((i, rng.randint(1, 350), rng.randint(1, 4), rng.choice(list(equipment_type)), rng.choice(["trânsito", "falha de equipamento", "estacionamento", "segurança", "obstrução"]), rng.choices(["baixa", "media", "alta", "critica"], [35, 40, 20, 5])[0], rng.choice(["aberta", "em_atendimento", "resolvida", "cancelada"]), "Evento fictício para demonstração e análise.", occurred))
+        equip_id = rng.choice(list(equipment_type))
+        occurrences.append((occurrence_id, rng.randint(1, 350), rng.randint(1, 4), equip_id,
+                            rng.choice(["tr\u00e2nsito", "falha de equipamento", "estacionamento", "seguran\u00e7a", "obstru\u00e7\u00e3o"]),
+                            rng.choices(["baixa", "media", "alta", "critica"], [35, 40, 20, 5])[0],
+                            rng.choice(["aberta", "em_atendimento", "resolvida", "cancelada"]),
+                            "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.", occurred))
     add("ocorrencias", ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em"], occurrences)
     alerts = []
     for i in range(1, 251):

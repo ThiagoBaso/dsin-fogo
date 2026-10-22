@@ -76,6 +76,7 @@ function CheckboxFilterGroup({
 
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
+  const [exibirContornoBairros, setExibirContornoBairros] = useState(false);
   const [pontos, setPontos] = useState<Ponto[]>([]);
   const [rotas, setRotas] = useState<RotaVeiculo[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -393,6 +394,14 @@ function App() {
                 />
                 <span>Permitir multisseleção</span>
               </label>
+              <label className="equipment-display-option" title="Divisórias internas seguem ruas do OpenStreetMap; setores e limite externo são fictícios e não oficiais.">
+                <input
+                  type="checkbox"
+                  checked={exibirContornoBairros}
+                  onChange={(event) => setExibirContornoBairros(event.target.checked)}
+                />
+                <span>Exibir contornos dos bairros (fictícios)</span>
+              </label>
             </section>
           </div>
           <div className="equipment-filters-actions">
@@ -414,11 +423,20 @@ function App() {
         </svg>
       </button>
       <div className='center-painel'>
-        <TopBarMap abaAtiva={abaAtiva} onChange={setAbaAtiva} />
+        <TopBarMap
+          abaAtiva={abaAtiva}
+          onChange={setAbaAtiva}
+        />
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
-          <Map pontos={pontosMapa} rotas={rotas} ativo={abaAtiva === 'mapa'} onSelecionar={selecionarNoMapa} />
+          <Map
+            pontos={pontosMapa}
+            rotas={rotas}
+            ativo={abaAtiva === 'mapa'}
+            onSelecionar={selecionarNoMapa}
+            exibirContornoBairros={exibirContornoBairros}
+          />
         </div>
         {abaAtiva === 'lista' && (
           <ItemList
