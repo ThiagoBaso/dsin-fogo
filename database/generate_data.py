@@ -115,7 +115,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         node = graph.nodes[node_id]
         lon, lat = float(node["x"]), float(node["y"])
         node_coords.append((lon, lat))
-        locations.append((i + 1, i % 40 + 1, None, "Marília", "SP", None,
+        locations.append((i + 1, i % 40 + 1, f"00000{i + 1:03d}", "Marília", "SP", f"Rua Demonstrativa {i + 1:03d}",
                           f"Referência sintética {i + 1:03d}; coordenada de via OSM", round(lat, 7), round(lon, 7)))
     add("localizacoes", ["id_localizacao", "id_bairro", "cep", "cidade", "uf", "logradouro", "referencia", "latitude", "longitude"], locations)
     # Route helpers use OSM order (longitude, latitude); SQL stores (latitude, longitude).

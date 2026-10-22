@@ -122,11 +122,33 @@
 .equipment-filters-content {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 20px;
+  padding: 14px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: #aeb7ba transparent;
+}
+
+.equipment-filters-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.equipment-filters-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.equipment-filters-content::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #aeb7ba;
+  background-clip: padding-box;
+}
+
+.equipment-filters-content::-webkit-scrollbar-thumb:hover {
+  background: #7d898d;
+  background-clip: padding-box;
 }
 
 .equipment-filters h2,
@@ -178,7 +200,7 @@
 }
 
 .equipment-filter-accordion {
-  padding: 15px;
+  padding: 11px;
   border: 1px solid #d8dddd;
   border-radius: 13px;
   background: var(--dsin-surface);
@@ -234,16 +256,16 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px 8px;
-  margin-top: 14px;
+  margin-top: 9px;
 }
 
 .equipment-filter-option {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   min-width: 0;
   margin: 0;
-  padding: 7px 6px;
+  padding: 4px 5px;
   border-radius: 7px;
   color: var(--dsin-text);
   font-size: 13px;
@@ -265,7 +287,7 @@
 .equipment-filter-option:first-child {
   grid-column: 1 / -1;
   margin-bottom: 2px;
-  padding-bottom: 10px;
+  padding-bottom: 7px;
   border-bottom: 1px solid var(--dsin-border);
   border-radius: 0;
 }
@@ -286,8 +308,8 @@
 .equipment-location-filters,
 .equipment-time-filters {
   display: grid;
-  gap: 11px;
-  padding: 15px;
+  gap: 8px;
+  padding: 11px;
   border: 1px solid #d8dddd;
   border-radius: 13px;
   background: var(--dsin-surface);
@@ -359,7 +381,7 @@
 .equipment-display-options {
   display: grid;
   gap: 4px;
-  padding: 15px;
+  padding: 11px;
   border: 1px solid #d8dddd;
   border-radius: 13px;
   background: var(--dsin-surface);
@@ -377,7 +399,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 7px 6px;
+  padding: 4px 5px;
   border-radius: 7px;
   color: var(--dsin-text);
   font-size: 13px;
@@ -406,7 +428,7 @@
 
 .equipment-filters-actions {
   flex-shrink: 0;
-  padding: 16px 20px 20px;
+  padding: 12px 14px 14px;
   border-top: 1px solid var(--dsin-border);
   background: #f7f8f7;
 }
@@ -987,7 +1009,7 @@
   }
 
   .equipment-filters-content {
-    padding: 20px 14px;
+    padding: 12px 10px;
   }
 
   .equipment-filter-options {
