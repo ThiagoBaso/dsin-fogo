@@ -257,6 +257,22 @@ def list_ocorrencias_equipamento(equipamento_id: int, em: datetime | None = None
     )
 
 
+@app.get("/api/equipamentos/{equipamento_id}/manutencoes")
+def list_manutencoes_equipamento(equipamento_id: int):
+    return fetch_all(
+        """
+        SELECT id_manutencao AS id, modalidade, prioridade, status, descricao,
+               aberta_em, prevista_para, iniciada_em, concluida_em
+        FROM manutencoes
+        WHERE id_equipamento = %s
+        ORDER BY CASE WHEN status IN ('pendente', 'agendada', 'em_execucao') THEN 0 ELSE 1 END,
+                 CASE WHEN prevista_para IS NULL THEN 1 ELSE 0 END,
+                 prevista_para ASC, aberta_em DESC, id_manutencao DESC
+        """,
+        (equipamento_id,),
+    )
+
+
 @app.get("/api/equipamentos/{equipamento_id}/viagens")
 def list_viagens_equipamento(
     equipamento_id: int,

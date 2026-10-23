@@ -33,8 +33,9 @@ services:
       - ./database/migrate_active_trips.sql:/migration.sql:ro
       - ./database/migrate_equipment_catalog.sql:/equipment-catalog-migration.sql:ro
       - ./database/migrate_location_addresses.sql:/location-addresses-migration.sql:ro
+      - ./database/migrate_equipment_situations.sql:/equipment-situations-migration.sql:ro
     entrypoint: ["/bin/sh", "-c"]
-    command: ["mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /migration.sql && mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /equipment-catalog-migration.sql && mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /location-addresses-migration.sql"]
+    command: ["mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /migration.sql && mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /equipment-catalog-migration.sql && mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /location-addresses-migration.sql && mysql --default-character-set=utf8mb4 --protocol=tcp --host=database --user=\"$$MYSQL_USER\" --password=\"$$MYSQL_PASSWORD\" \"$$MYSQL_DATABASE\" < /equipment-situations-migration.sql"]
     depends_on:
       database:
         condition: service_healthy

@@ -97,6 +97,18 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
         check(f"{table} >= {minimum}", len(tables.get(table, [])) >= minimum, str(len(tables.get(table, []))))
     eq = {r["id_equipamento"]: r for r in tables["equipamentos"]}
     types = {r["id_tipo"]: r for r in tables["tipos_equipamento"]}
+    situation_counts = defaultdict(int)
+    for row in eq.values():
+        if row["numero_serie"].startswith("DEMO-") and row["id_situacao"] in (6, 7):
+            situation_counts[row["id_situacao"]] += 1
+    check("8 equipamentos ainda nao instalados", situation_counts[6] == 8, str(situation_counts[6]))
+    check("8 equipamentos com mau funcionamento", situation_counts[7] == 8, str(situation_counts[7]))
+    check("equipamentos ainda nao instalados sem data de instalacao",
+          all(row["instalado_em"] is None for row in eq.values() if row["id_situacao"] == 6),
+          str(sum(row["id_situacao"] == 6 and row["instalado_em"] is not None for row in eq.values())))
+    check("equipamentos com mau funcionamento instalados",
+          all(row["instalado_em"] is not None for row in eq.values() if row["id_situacao"] == 7),
+          str(sum(row["id_situacao"] == 7 and row["instalado_em"] is None for row in eq.values())))
     mobile = {eid for eid, row in eq.items() if types[row["id_tipo"]]["mobilidade"] == "movel"}
     trips = {r["id_viagem"]: r for r in tables["viagens"]}
     positions_by_trip = defaultdict(list)

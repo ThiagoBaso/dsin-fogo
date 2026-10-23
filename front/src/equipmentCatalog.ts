@@ -41,4 +41,6 @@ export const equipmentSituations: Record<number, { label: string; symbol: string
   3: { label: 'Desativado', symbol: '×', className: 'desativado' },
   4: { label: 'Furtado', symbol: '!', className: 'furtado' },
   5: { label: 'Em manutenção', symbol: '⚒', className: 'manutencao' },
+  6: { label: 'Ainda n\u00e3o instalado', symbol: '\u25cb', className: 'nao-instalado' },
+  7: { label: 'Mau funcionamento', symbol: '!', className: 'mau-funcionamento' },
 };

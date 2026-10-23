@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AtributoEquipamento, DetalhesEquipamento, OcorrenciaEquipamento, Ponto, RotaVeiculo } from '../types';
+import { AtributoEquipamento, DetalhesEquipamento, ManutencaoEquipamento, OcorrenciaEquipamento, Ponto, RotaVeiculo } from '../types';
 import { equipmentSituations, equipmentTypes } from '../equipmentCatalog';
 
 const attributeLabels: Record<string, string> = {
@@ -37,11 +37,30 @@ const routeStatusLabels: Record<RotaVeiculo['situacao'], string> = {
 
 const routePageSize = 10;
 
+const maintenanceTypeLabels: Record<ManutencaoEquipamento['modalidade'], string> = {
+  preventiva: 'Preventiva',
+  corretiva: 'Corretiva',
+};
+
+const maintenancePriorityLabels: Record<ManutencaoEquipamento['prioridade'], string> = {
+  imediata: 'Imediata',
+  agendada: 'Agendada',
+};
+
+const maintenanceStatusLabels: Record<ManutencaoEquipamento['status'], string> = {
+  pendente: 'Pendente',
+  agendada: 'Agendada',
+  em_execucao: 'Em execu\u00e7\u00e3o',
+  concluida: 'Conclu\u00edda',
+  cancelada: 'Cancelada',
+};
+
 const detailTabs = [
   { id: 'identificacao', label: 'Identificação' },
   { id: 'posicao', label: 'Posição' },
   { id: 'atributos', label: 'Atributos' },
   { id: 'ocorrencias', label: 'Ocorrências' },
+  { id: 'manutencao', label: 'Manuten\u00e7\u00e3o' },
   { id: 'historico', label: 'Histórico de rotas' },
 ] as const;
 
@@ -60,6 +79,19 @@ function formatDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toLocaleString('pt-BR');
+}
+
+function findNextMaintenance(items: ManutencaoEquipamento[]) {
+  const active = items.filter((item) => ['pendente', 'agendada', 'em_execucao'].includes(item.status));
+  const withDate = active.filter((item) => item.prevista_para && !Number.isNaN(new Date(item.prevista_para).getTime()));
+  const now = Date.now();
+  const upcoming = withDate
+    .filter((item) => new Date(item.prevista_para as string).getTime() >= now)
+    .sort((a, b) => new Date(a.prevista_para as string).getTime() - new Date(b.prevista_para as string).getTime())[0];
+  if (upcoming) return upcoming;
+  const overdue = withDate
+    .sort((a, b) => new Date(b.prevista_para as string).getTime() - new Date(a.prevista_para as string).getTime())[0];
+  return overdue || active[0] || null;
 }
 
 function formatAttribute(attribute: AtributoEquipamento) {
@@ -125,9 +157,11 @@ function formatDistance(metros: number) {
 export default function EquipmentDetails({ ponto, dataHora, onClose }: { ponto: Ponto | null; dataHora: string | null; onClose: () => void }) {
   const [detalhes, setDetalhes] = useState<DetalhesEquipamento | null>(null);
   const [ocorrencias, setOcorrencias] = useState<OcorrenciaEquipamento[] | null>(null);
+  const [manutencoes, setManutencoes] = useState<ManutencaoEquipamento[] | null>(null);
   const [rotasHistorico, setRotasHistorico] = useState<RotaVeiculo[]>([]);
   const [erro, setErro] = useState('');
   const [erroOcorrencias, setErroOcorrencias] = useState('');
+  const [erroManutencoes, setErroManutencoes] = useState('');
   const [erroRotas, setErroRotas] = useState('');
   const [carregandoRotas, setCarregandoRotas] = useState(false);
   const [rotasOffset, setRotasOffset] = useState(0);
@@ -209,6 +243,29 @@ export default function EquipmentDetails({ ponto, dataHora, onClose }: { ponto: 
     return () => controller.abort();
   }, [equipamentoId, dataHora, tentativa]);
 
+  useEffect(() => {
+    setManutencoes(null);
+    setErroManutencoes('');
+    if (abaAtiva !== 'manutencao' || equipamentoId === undefined) return undefined;
+    const controller = new AbortController();
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/equipamentos/${equipamentoId}/manutencoes`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<ManutencaoEquipamento[]>;
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) setManutencoes(data);
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') {
+          setErroManutencoes('N\u00e3o foi poss\u00edvel carregar as manuten\u00e7\u00f5es deste equipamento.');
+        }
+      });
+    return () => controller.abort();
+  }, [abaAtiva, equipamentoId, tentativa]);
+
   const atual = detalhes?.id === equipamentoId ? detalhes : null;
 
   useEffect(() => {
@@ -230,6 +287,7 @@ export default function EquipmentDetails({ ponto, dataHora, onClose }: { ponto: 
     return () => requestRotas.current?.abort();
   }, [abaAtiva, atual?.mobilidade, carregarHistorico]);
 
+  const proximaManutencao = manutencoes ? findNextMaintenance(manutencoes) : null;
   const tabPanelId = 'equipment-details-panel';
 
   return (
@@ -388,6 +446,76 @@ export default function EquipmentDetails({ ponto, dataHora, onClose }: { ponto: 
                       </li>
                     ))}
                   </ul>
+                )}
+              </div>
+            )}
+            {abaAtiva === 'manutencao' && (
+              <div className="equipment-detail-group equipment-maintenance-group">
+                <div className="equipment-maintenance-next">
+                  <h3>Pr&oacute;xima manuten&ccedil;&atilde;o</h3>
+                  {manutencoes === null ? (
+                    <p role="status">Carregando manuten&ccedil;&otilde;es...</p>
+                  ) : erroManutencoes ? (
+                    <p role="alert">N&atilde;o foi poss&iacute;vel carregar os registros.</p>
+                  ) : proximaManutencao ? (
+                    <>
+                      <div className="equipment-maintenance-heading">
+                        <strong>{maintenanceTypeLabels[proximaManutencao.modalidade]}</strong>
+                        <span className={`maintenance-status maintenance-status-${proximaManutencao.status}`}>
+                          {maintenanceStatusLabels[proximaManutencao.status]}
+                        </span>
+                      </div>
+                      <dl className="equipment-maintenance-meta">
+                        <Field label="Data prevista" value={formatDate(proximaManutencao.prevista_para)} />
+                        <Field label="Prioridade" value={maintenancePriorityLabels[proximaManutencao.prioridade]} />
+                      </dl>
+                      {proximaManutencao.prevista_para && new Date(proximaManutencao.prevista_para).getTime() < Date.now() && (
+                        <p className="maintenance-overdue">Data prevista ultrapassada</p>
+                      )}
+                    </>
+                  ) : manutencoes?.some((item) => ['pendente', 'agendada', 'em_execucao'].includes(item.status)) ? (
+                    <p>H&aacute; uma manuten&ccedil;&atilde;o em aberto sem data prevista.</p>
+                  ) : (
+                    <p>Nenhuma manuten&ccedil;&atilde;o futura cadastrada.</p>
+                  )}
+                </div>
+                {erroManutencoes ? (
+                  <div role="alert" className="route-history-error">
+                    <p>{erroManutencoes}</p>
+                    <button type="button" onClick={() => setTentativa((value) => value + 1)}>Tentar novamente</button>
+                  </div>
+                ) : manutencoes === null ? null : manutencoes.length === 0 ? (
+                  <p>Nenhuma manuten&ccedil;&atilde;o registrada para este equipamento.</p>
+                ) : (
+                  <>
+                    <h3 className="equipment-maintenance-records-title">Registros</h3>
+                    <ul className="equipment-maintenance-list">
+                      {manutencoes.map((manutencao) => (
+                        <li className="equipment-maintenance-item" key={manutencao.id}>
+                          <div className="equipment-maintenance-heading">
+                            <strong>{maintenanceTypeLabels[manutencao.modalidade]}</strong>
+                            <span className={`maintenance-status maintenance-status-${manutencao.status}`}>
+                              {maintenanceStatusLabels[manutencao.status]}
+                            </span>
+                          </div>
+                          <span className={`maintenance-priority maintenance-priority-${manutencao.prioridade}`}>
+                            Prioridade {maintenancePriorityLabels[manutencao.prioridade].toLocaleLowerCase('pt-BR')}
+                          </span>
+                          <dl className="equipment-maintenance-meta equipment-maintenance-record-meta">
+                            <Field label="Abertura" value={formatDate(manutencao.aberta_em)} />
+                            <Field label="Data prevista" value={formatDate(manutencao.prevista_para)} />
+                            <Field label="In&iacute;cio" value={formatDate(manutencao.iniciada_em)} />
+                            <Field label="Conclus&atilde;o" value={formatDate(manutencao.concluida_em)} />
+                          </dl>
+                          {manutencao.descricao && (
+                            <dl className="equipment-maintenance-description">
+                              <Field label="Descrição" value={manutencao.descricao} />
+                            </dl>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </div>
             )}

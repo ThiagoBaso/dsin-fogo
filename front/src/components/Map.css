@@ -15,6 +15,8 @@
 .situation-desativado .equipment-state { background: #334155; }
 .situation-furtado .equipment-state { background: #dc2626; }
 .situation-manutencao .equipment-state { background: #d97706; }
+.situation-nao-instalado .equipment-state { background: #475569; }
+.situation-mau-funcionamento .equipment-state { background: #ea580c; }
 .neighborhood-boundary-tooltip {
   border: 1px solid var(--dsin-charcoal);
   border-radius: 6px;

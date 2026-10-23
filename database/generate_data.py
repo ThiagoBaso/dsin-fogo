@@ -130,7 +130,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         ("Veículo autônomo de fiscalização de estacionamento", "movel", "car"),
     ]
     add("tipos_equipamento", ["id_tipo", "nome", "mobilidade", "icone_mapa"], [(i + 1, *t) for i, t in enumerate(types)])
-    states = [(1, "operacional", True), (2, "indisponível", False), (3, "desativado", False), (4, "furtado", False), (5, "em manutenção", False)]
+    states = [(1, "operacional", True), (2, "indispon\u00edvel", False), (3, "desativado", False), (4, "furtado", False), (5, "em manuten\u00e7\u00e3o", False), (6, "ainda n\u00e3o instalado", False), (7, "mau funcionamento", False)]
     add("situacoes_equipamento", ["id_situacao", "nome", "disponivel"], states)
     mobile_ids = [2, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     equipment_rows = []
@@ -140,15 +140,25 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     rng.shuffle(type_order)
     # Add eight complete mobile units for each newly represented service.
     type_order += [new_type for new_type in (12, 13, 14, 15) for _ in range(8)]
+    fixed_asset_ids = [equipment_id for equipment_id, type_id in enumerate(type_order, 1) if type_id in fixed_types]
+    not_installed_ids = set(fixed_asset_ids[:8])
+    malfunction_ids = set(fixed_asset_ids[8:16])
     equipment_type = {}
     for i, type_id in enumerate(type_order, 1):
         equipment_type[i] = type_id
         state = rng.choices([1, 2, 3, 4, 5], [78, 8, 4, 2, 8])[0]
-        equipment_rows.append((i, type_id, rng.choices([1, 2, 3, 4], [35, 25, 20, 20])[0],
-                               rng.randint(1, 350), state, f"DEMO-{i:05d}",
+        if i in not_installed_ids:
+            state = 6
+        elif i in malfunction_ids:
+            state = 7
+        org_id = rng.choices([1, 2, 3, 4], [35, 25, 20, 20])[0]
+        location_id = rng.randint(1, 350)
+        if i >= 501:
+            location_id = i - 500
+        equipment_rows.append((i, type_id, org_id, location_id, state, f"DEMO-{i:05d}",
                                ["Intelbras", "Dahua", "Pumatronix", "Siemens", "DemoTech"][i % 5],
                                f"Modelo-{(i % 17) + 1:02d}", NOW - timedelta(days=rng.randint(30, 1300)),
-                               NOW - timedelta(days=rng.randint(1, 1000)) if type_id not in mobile_ids else None))
+                               NOW - timedelta(days=rng.randint(1, 1000)) if type_id not in mobile_ids and state != 6 else None))
     add("equipamentos", ["id_equipamento", "id_tipo", "id_orgao", "id_localizacao", "id_situacao", "numero_serie", "marca", "modelo", "cadastrado_em", "instalado_em"], equipment_rows)
 
     attr_defs = [(1, "limite_velocidade", "numero", "km/h"), (1, "modalidade", "texto", None),

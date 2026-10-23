@@ -62,6 +62,18 @@ export interface OcorrenciaEquipamento {
   uf: string | null;
 }
 
+export interface ManutencaoEquipamento {
+  id: number;
+  modalidade: 'preventiva' | 'corretiva';
+  prioridade: 'imediata' | 'agendada';
+  status: 'pendente' | 'agendada' | 'em_execucao' | 'concluida' | 'cancelada';
+  descricao: string | null;
+  aberta_em: string;
+  prevista_para: string | null;
+  iniciada_em: string | null;
+  concluida_em: string | null;
+}
+
 export interface DetalhesEquipamento {
   id: number;
   tipo_id: number;
