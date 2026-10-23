@@ -32,6 +32,7 @@ function App() {
   const [rotas, setRotas] = useState<RotaVeiculo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
+  const [erroRotas, setErroRotas] = useState('');
   const [tiposSelecionados, setTiposSelecionados] = useState<number[]>([1]);
   const [tiposAplicados, setTiposAplicados] = useState<number[]>([1]);
   const [situacoesSelecionadas, setSituacoesSelecionadas] = useState<number[]>(
@@ -182,10 +183,12 @@ function App() {
     );
     if (idsMoveisSelecionados.length === 0) {
       setRotas([]);
+      setErroRotas('');
       return;
     }
 
     const controller = new AbortController();
+    setErroRotas('');
     const query = new URLSearchParams();
     idsMoveisSelecionados.forEach((id) => query.append('equipamento_ids', String(id)));
     if (dataHoraAplicada) query.set('em', dataHoraAplicada);
@@ -197,9 +200,15 @@ function App() {
         if (!response.ok) throw new Error(`API respondeu ${response.status}`);
         return response.json() as Promise<RotaVeiculo[]>;
       })
-      .then(setRotas)
+      .then((dados) => {
+        setRotas(dados);
+        setErroRotas('');
+      })
       .catch((error: Error) => {
-        if (error.name !== 'AbortError') setRotas([]);
+        if (error.name !== 'AbortError') {
+          setRotas([]);
+          setErroRotas('Não foi possível carregar as rotas dos equipamentos selecionados.');
+        }
       });
 
     return () => controller.abort();
@@ -244,6 +253,7 @@ function App() {
         />
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
+        {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
         <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
           <Map
             pontos={pontosMapa}
