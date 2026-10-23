@@ -4,21 +4,14 @@ import Map from './components/Map';
 import TopBarMap from './components/TopBarMap';
 import ItemList from './components/ItemList';
 import EquipmentDetails from './components/EquipmentDetails';
-import { Aba, Ponto, RotaVeiculo } from './types';
+import FilterPanel from './components/FilterPanel';
+import { Aba, LocationFilters, Ponto, RotaVeiculo } from './types';
 import { equipmentSituations, equipmentTypes } from './equipmentCatalog';
 
 const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, situation]) => ({
   id: Number(id),
   label: situation.label,
 }));
-
-type LocationFilters = {
-  bairro: string;
-  regiao: string;
-  cidade: string;
-  uf: string;
-  busca: string;
-};
 
 const emptyLocationFilters: LocationFilters = {
   bairro: '',
@@ -30,48 +23,6 @@ const emptyLocationFilters: LocationFilters = {
 
 function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-}
-
-function CheckboxFilterGroup({
-  title,
-  options,
-  selectedIds,
-  onChange,
-}: {
-  title: string;
-  options: { id: number; label: string }[];
-  selectedIds: number[];
-  onChange: (ids: number[]) => void;
-}) {
-  const todosSelecionados = selectedIds.length === options.length;
-
-  return (
-    <details className="equipment-filter-accordion" open>
-      <summary>{title}</summary>
-      <div className="equipment-filter-options" role="group" aria-label={title}>
-        <label className="equipment-filter-option">
-          <input
-            type="checkbox"
-            checked={todosSelecionados}
-            onChange={(event) => onChange(event.target.checked ? options.map((option) => option.id) : [])}
-          />
-          <span>Todos</span>
-        </label>
-        {options.map((option) => (
-          <label className="equipment-filter-option" key={option.id}>
-            <input
-              type="checkbox"
-              checked={selectedIds.includes(option.id)}
-              onChange={(event) => onChange(event.target.checked
-                ? [...selectedIds, option.id]
-                : selectedIds.filter((id) => id !== option.id))}
-            />
-            <span>{option.label}</span>
-          </label>
-        ))}
-      </div>
-    </details>
-  );
 }
 
 function App() {
@@ -256,172 +207,36 @@ function App() {
 
   return (
     <div className={painelExpandido ? 'App' : 'App filters-collapsed'}>
-      <aside
-        id="equipment-filter-panel"
-        className='left-painel'
-        aria-label="Filtros de equipamentos"
-        hidden={!painelExpandido}
-      >
-        <form
-          className="equipment-filters"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setTiposAplicados(tiposSelecionados);
-            setSituacoesAplicadas(situacoesSelecionadas);
-            setLocalizacaoAplicada(filtrosLocalizacao);
-            setDataHoraAplicada(modoData === 'historico' ? dataHoraSelecionada : null);
-          }}
-        >
-          <div className="equipment-filters-content">
-            <div className="equipment-filters-heading">
-              <h2>Filtros</h2>
-              <button type="button" className="equipment-filters-reset" onClick={resetarFiltros}>
-                Resetar
-              </button>
-            </div>
-            <section className="equipment-time-filters" aria-label="Período dos equipamentos">
-              <h3>Período</h3>
-              <label className="equipment-time-option">
-                <input
-                  type="radio"
-                  name="modo-data"
-                  value="atual"
-                  checked={modoData === 'atual'}
-                  onChange={() => setModoData('atual')}
-                />
-                <span>Atual</span>
-              </label>
-              <label className="equipment-time-option">
-                <input
-                  type="radio"
-                  name="modo-data"
-                  value="historico"
-                  checked={modoData === 'historico'}
-                  onChange={() => setModoData('historico')}
-                />
-                <span>Escolher data e hora</span>
-              </label>
-              {modoData === 'historico' && (
-                <label className="equipment-location-control">
-                  <span>Data e hora</span>
-                  <input
-                    type="datetime-local"
-                    value={dataHoraSelecionada}
-                    max={toLocalDateTimeValue(new Date())}
-                    required
-                    onChange={(event) => setDataHoraSelecionada(event.target.value)}
-                  />
-                </label>
-              )}
-            </section>
-            <CheckboxFilterGroup
-              title="Tipo de equipamento"
-              options={equipmentTypes}
-              selectedIds={tiposSelecionados}
-              onChange={setTiposSelecionados}
-            />
-            <CheckboxFilterGroup
-              title="Status do equipamento"
-              options={equipmentSituationOptions}
-              selectedIds={situacoesSelecionadas}
-              onChange={setSituacoesSelecionadas}
-            />
-            <details className="equipment-filter-accordion equipment-location-filters" aria-label="Filtros de localização">
-              <summary>Localização</summary>
-              <label className="equipment-location-control">
-                <span>Bairro</span>
-                <select value={filtrosLocalizacao.bairro} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, bairro: event.target.value })}>
-                  <option value="">Todos os bairros</option>
-                  {opcoesLocalizacao.bairros.map((bairro) => <option key={bairro} value={bairro}>{bairro}</option>)}
-                </select>
-              </label>
-              <label className="equipment-location-control">
-                <span>Região</span>
-                <select value={filtrosLocalizacao.regiao} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, regiao: event.target.value })}>
-                  <option value="">Todas as regiões</option>
-                  {opcoesLocalizacao.regioes.map((regiao) => <option key={regiao} value={regiao}>{regiao}</option>)}
-                </select>
-              </label>
-              <label className="equipment-location-control">
-                <span>Cidade</span>
-                <select value={filtrosLocalizacao.cidade} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, cidade: event.target.value })}>
-                  <option value="">Todas as cidades</option>
-                  {opcoesLocalizacao.cidades.map((cidade) => <option key={cidade} value={cidade}>{cidade}</option>)}
-                </select>
-              </label>
-              <label className="equipment-location-control">
-                <span>UF</span>
-                <select value={filtrosLocalizacao.uf} onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, uf: event.target.value })}>
-                  <option value="">Todas as UFs</option>
-                  {opcoesLocalizacao.ufs.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-                </select>
-              </label>
-              <label className="equipment-location-control">
-                <span>Logradouro, referência ou CEP</span>
-                <input
-                  type="search"
-                  value={filtrosLocalizacao.busca}
-                  onChange={(event) => setFiltrosLocalizacao({ ...filtrosLocalizacao, busca: event.target.value })}
-                  placeholder="Buscar endereço"
-                />
-              </label>
-            </details>
-            <details className="equipment-filter-accordion equipment-location-filters" aria-label="Posição de equipamentos móveis">
-              <summary>Posição dos equipamentos móveis</summary>
-              <label className="equipment-location-control">
-                <span>Exibir no mapa</span>
-                <select value={posicaoMovel} onChange={(event) => setPosicaoMovel(event.target.value as 'gps' | 'fixa')}>
-                  <option value="gps">Última posição no GPS</option>
-                  <option value="fixa">Posição fixa cadastrada</option>
-                </select>
-              </label>
-            </details>
-            <section className="equipment-display-options" aria-label="Opções de exibição">
-              <h3>Opções de exibição</h3>
-              <label className="equipment-display-option">
-                <input
-                  type="checkbox"
-                  checked={exibirApenasSelecionados}
-                  onChange={(event) => setExibirApenasSelecionados(event.target.checked)}
-                />
-                <span>Exibir apenas selecionados</span>
-              </label>
-              <label className="equipment-display-option">
-                <input
-                  type="checkbox"
-                  checked={permitirMultisselecao}
-                  onChange={(event) => alterarMultisselecao(event.target.checked)}
-                />
-                <span>Permitir multisseleção</span>
-              </label>
-              <label className="equipment-display-option" title="Divisórias internas seguem ruas do OpenStreetMap; setores e limite externo são fictícios e não oficiais.">
-                <input
-                  type="checkbox"
-                  checked={exibirContornoBairros}
-                  onChange={(event) => setExibirContornoBairros(event.target.checked)}
-                />
-                <span>Exibir contornos dos bairros (fictícios)</span>
-              </label>
-            </section>
-          </div>
-          <div className="equipment-filters-actions">
-            <button type="submit">Atualizar</button>
-          </div>
-        </form>
-      </aside>
-      <button
-        className="filter-panel-toggle"
-        type="button"
-        aria-controls="equipment-filter-panel"
-        aria-expanded={painelExpandido}
-        aria-label={painelExpandido ? 'Recolher painel de filtros' : 'Expandir painel de filtros'}
-        title={painelExpandido ? 'Recolher painel de filtros' : 'Expandir painel de filtros'}
-        onClick={() => setPainelExpandido((expandido) => !expandido)}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d={painelExpandido ? 'm14 6-6 6 6 6' : 'm10 6 6 6-6 6'} />
-        </svg>
-      </button>
+      <FilterPanel
+        expanded={painelExpandido}
+        onExpandedChange={setPainelExpandido}
+        types={{ options: equipmentTypes, selectedIds: tiposSelecionados, onChange: setTiposSelecionados }}
+        situations={{ options: equipmentSituationOptions, selectedIds: situacoesSelecionadas, onChange: setSituacoesSelecionadas }}
+        location={{ value: filtrosLocalizacao, options: opcoesLocalizacao, onChange: setFiltrosLocalizacao }}
+        position={{ value: posicaoMovel, onChange: setPosicaoMovel }}
+        period={{
+          mode: modoData,
+          onModeChange: setModoData,
+          value: dataHoraSelecionada,
+          onValueChange: setDataHoraSelecionada,
+          maxValue: toLocalDateTimeValue(new Date()),
+        }}
+        display={{
+          onlySelected: exibirApenasSelecionados,
+          onOnlySelectedChange: setExibirApenasSelecionados,
+          multiSelection: permitirMultisselecao,
+          onMultiSelectionChange: alterarMultisselecao,
+          neighborhoodBoundaries: exibirContornoBairros,
+          onNeighborhoodBoundariesChange: setExibirContornoBairros,
+        }}
+        onApply={() => {
+          setTiposAplicados(tiposSelecionados);
+          setSituacoesAplicadas(situacoesSelecionadas);
+          setLocalizacaoAplicada(filtrosLocalizacao);
+          setDataHoraAplicada(modoData === 'historico' ? dataHoraSelecionada : null);
+        }}
+        onReset={resetarFiltros}
+      />
       <div className='center-painel'>
         <TopBarMap
           abaAtiva={abaAtiva}
@@ -447,6 +262,7 @@ function App() {
             onVisualizar={visualizarEquipamento}
             onAlternarSelecao={alternarSelecao}
             onAlternarTodos={(selecionar, idsVisiveis) => {
+              if (selecionar) setPermitirMultisselecao(true);
               setSelecionadosIds((selecionados) =>
                 selecionar
                   ? selecionados.filter((id) => !idsVisiveis.includes(id)).concat(idsVisiveis)

@@ -1,5 +1,13 @@
 export type Aba = 'mapa' | 'lista';
 
+export interface LocationFilters {
+  bairro: string;
+  regiao: string;
+  cidade: string;
+  uf: string;
+  busca: string;
+}
+
 export interface Ponto {
   id: number;
   nome: string;
