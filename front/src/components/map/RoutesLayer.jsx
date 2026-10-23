@@ -1,18 +1,8 @@
-import { Fragment, useEffect, useMemo } from 'react';
-import { CircleMarker, Polyline, Popup, useMap } from 'react-leaflet';
+import { Fragment, useMemo } from 'react';
+import { CircleMarker, Polyline, Popup } from 'react-leaflet';
 
-export default function RoutesLayer({ rotas, ativo }) {
-  const map = useMap();
+export default function RoutesLayer({ rotas }) {
   const rotasVisiveis = useMemo(() => rotas.filter((rota) => rota.posicoes.length > 1), [rotas]);
-
-  useEffect(() => {
-    if (!ativo || rotasVisiveis.length === 0) return;
-
-    const caminhoCompleto = rotasVisiveis.flatMap((rota) =>
-      rota.posicoes.map((posicao) => [posicao.latitude, posicao.longitude]),
-    );
-    map.fitBounds(caminhoCompleto, { padding: [48, 48], maxZoom: 15 });
-  }, [ativo, map, rotasVisiveis]);
 
   return rotasVisiveis.map((rota) => {
     const caminho = rota.posicoes.map((posicao) => [posicao.latitude, posicao.longitude]);
