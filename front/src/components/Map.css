@@ -4,6 +4,7 @@
   border: 2px solid #fff; border-radius: 50% 50% 50% 10%; background: #3c4548;
   box-shadow: 0 2px 7px #3c454866; transform: rotate(-45deg);
 }
+.equipment-marker.is-selected { border: 3px solid #fecc00; box-shadow: 0 0 0 2px #fecc004d, 0 2px 7px #3c454866; }
 .equipment-marker img { width: 23px; height: 23px; object-fit: contain; transform: rotate(45deg); }
 .equipment-state {
   position: absolute; top: -5px; right: -6px; display: grid; width: 17px; height: 17px;

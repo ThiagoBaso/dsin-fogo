@@ -435,6 +435,7 @@ function App() {
             rotas={rotas}
             ativo={abaAtiva === 'mapa'}
             onSelecionar={selecionarNoMapa}
+            selecionadosIds={selecionadosIds}
             exibirContornoBairros={exibirContornoBairros}
           />
         </div>

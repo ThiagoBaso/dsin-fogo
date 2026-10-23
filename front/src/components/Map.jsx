@@ -46,16 +46,16 @@ function AjustarTamanhoMapa({ ativo }) {
 
 const marcadores = new Map();
 
-function criarIcone(ponto) {
+function criarIcone(ponto, selecionado) {
   const arquivoIcone = equipmentIcons[ponto.tipo_id] || 'car';
   const situacao = equipmentSituations[ponto.situacao_id] || {
     label: 'Situação desconhecida', symbol: '?', className: 'indisponivel',
   };
-  const chave = `${arquivoIcone}-${ponto.situacao_id}`;
+  const chave = `${arquivoIcone}-${ponto.situacao_id}-${selecionado ? 'selecionado' : 'normal'}`;
   if (!marcadores.has(chave)) {
     marcadores.set(chave, L.divIcon({
       className: 'equipment-div-icon',
-      html: `<span class="equipment-marker situation-${situacao.className}" title="${situacao.label}"><img src="/icons/${arquivoIcone}.svg" alt=""/><span class="equipment-state">${situacao.symbol}</span></span>`,
+      html: `<span class="equipment-marker${selecionado ? ' is-selected' : ''} situation-${situacao.className}" title="${situacao.label}"><img src="/icons/${arquivoIcone}.svg" alt=""/><span class="equipment-state">${situacao.symbol}</span></span>`,
       iconSize: [42, 46],
       iconAnchor: [21, 23],
       popupAnchor: [0, -20],
@@ -64,7 +64,7 @@ function criarIcone(ponto) {
   return marcadores.get(chave);
 }
 
-export default function MapaMarilia({ pontos, rotas = [], ativo, onSelecionar, exibirContornoBairros = false }) {
+export default function MapaMarilia({ pontos, rotas = [], ativo, onSelecionar, selecionadosIds = [], exibirContornoBairros = false }) {
   const [setorSelecionadoId, setSetorSelecionadoId] = useState(null);
 
   return (
@@ -125,7 +125,7 @@ export default function MapaMarilia({ pontos, rotas = [], ativo, onSelecionar, e
           <Marker
             key={ponto.id}
             position={[ponto.latitude, ponto.longitude]}
-            icon={criarIcone(ponto)}
+            icon={criarIcone(ponto, selecionadosIds.includes(ponto.id))}
             eventHandlers={{
               click: () => onSelecionar(ponto),
             }}
