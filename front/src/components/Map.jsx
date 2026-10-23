@@ -28,7 +28,7 @@ export default function MapaMarilia({
         attribution="&copy; OpenStreetMap contributors"
       />
       <NeighborhoodLayer enabled={exibirContornoBairros} />
-      <RoutesLayer rotas={rotas} />
+      <RoutesLayer rotas={rotas} ativo={ativo} />
       <EquipmentMarkers
         pontos={pontos}
         selecionadosIds={selecionadosIds}
