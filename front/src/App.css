@@ -133,22 +133,31 @@
   scrollbar-color: #aeb7ba transparent;
 }
 
-.equipment-filters-content::-webkit-scrollbar {
+.rigth-painel {
+  scrollbar-width: thin;
+  scrollbar-color: #aeb7ba transparent;
+}
+
+.equipment-filters-content::-webkit-scrollbar,
+.rigth-painel::-webkit-scrollbar {
   width: 6px;
 }
 
-.equipment-filters-content::-webkit-scrollbar-track {
+.equipment-filters-content::-webkit-scrollbar-track,
+.rigth-painel::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.equipment-filters-content::-webkit-scrollbar-thumb {
+.equipment-filters-content::-webkit-scrollbar-thumb,
+.rigth-painel::-webkit-scrollbar-thumb {
   border: 1px solid transparent;
   border-radius: 999px;
   background: #aeb7ba;
   background-clip: padding-box;
 }
 
-.equipment-filters-content::-webkit-scrollbar-thumb:hover {
+.equipment-filters-content::-webkit-scrollbar-thumb:hover,
+.rigth-painel::-webkit-scrollbar-thumb:hover {
   background: #7d898d;
   background-clip: padding-box;
 }
