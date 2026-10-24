@@ -333,8 +333,9 @@
 .equipment-attribute-group-count {
   flex: 0 0 auto;
   padding: 3px 7px;
+  border: 1px solid var(--dsin-border);
   border-radius: 999px;
-  background: #fff4bf;
+  background: var(--dsin-surface-subtle);
   color: var(--dsin-ink);
   font-size: 10px;
   font-weight: 700;
@@ -681,6 +682,28 @@
   margin: 0;
   accent-color: var(--dsin-yellow);
   cursor: pointer;
+}
+
+.equipment-agent-filter-content {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.equipment-agent-filter-group {
+  padding: 8px;
+  border-radius: 9px;
+  background: var(--dsin-surface-subtle);
+  box-shadow: none;
+}
+
+.equipment-agent-filter-group > summary {
+  font-size: 13px;
+}
+
+.equipment-agent-filter-group .equipment-filter-options {
+  gap: 3px 5px;
+  margin-top: 5px;
 }
 
 .equipment-filters-actions {
@@ -1275,6 +1298,21 @@
   cursor: not-allowed;
 }
 
+.agent-list-count {
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 30px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #fff4bf;
+  color: var(--dsin-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .item-list-empty {
   padding: 16px 0;
   text-align: center;
@@ -1403,14 +1441,20 @@
   .map-bar-switch {
     width: 100%;
     box-sizing: border-box;
+    gap: 2px;
+    padding: 3px;
   }
 
   .map-bar button {
     flex: 1 1 0;
     min-width: 0;
-    padding: 7px 8px;
-    gap: 6px;
-    font-size: 12px;
+    min-height: 44px;
+    padding: 7px 4px;
+    gap: 0;
+  }
+
+  .map-bar button span {
+    display: none;
   }
 
   .item-list-header {

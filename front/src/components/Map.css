@@ -18,6 +18,35 @@
 .situation-manutencao .equipment-state { background: #d97706; }
 .situation-nao-instalado .equipment-state { background: #475569; }
 .situation-mau-funcionamento .equipment-state { background: #ea580c; }
+.agent-div-icon { background: transparent; border: 0; }
+.agent-marker {
+  position: relative; display: grid; width: 28px; height: 28px; place-items: center;
+  border: 2px solid var(--dsin-page); border-radius: 50%; background: var(--dsin-charcoal);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .28); color: var(--dsin-page);
+}
+.agent-marker.is-selected { border: 3px solid var(--dsin-yellow); box-shadow: 0 2px 7px rgba(0, 0, 0, .28); }
+.agent-marker svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.agent-marker-count {
+  position: absolute; top: -7px; right: -8px; display: grid; min-width: 15px; height: 15px;
+  box-sizing: border-box; place-items: center; padding: 0 3px; border: 1px solid var(--dsin-page);
+  border-radius: 999px; background: var(--dsin-yellow); color: var(--dsin-ink); font: 700 9px/1 Arial, sans-serif;
+}
+.agent-selector-popup .leaflet-popup-content { width: 188px; margin: 9px; }
+.agent-selector-popup .leaflet-popup-close-button { display: none; }
+.agent-selector { display: grid; }
+.agent-selector-options { display: grid; gap: 5px; }
+.agent-selector-options button {
+  display: grid; width: 100%; min-height: 40px; box-sizing: border-box; gap: 1px;
+  padding: 5px 8px; border: 1px solid var(--dsin-border); border-radius: 7px;
+  background: var(--dsin-surface); color: var(--dsin-ink); font: inherit; text-align: left; cursor: pointer;
+}
+.agent-selector-options button:hover,
+.agent-selector-options button[aria-pressed='true'] {
+  border-color: var(--dsin-yellow); background: var(--dsin-surface-subtle);
+}
+.agent-selector-options button:focus-visible { outline: 2px solid var(--dsin-ink); outline-offset: 2px; }
+.agent-selector-registration { font-size: 12px; font-weight: 700; }
+.agent-selector-options small { color: var(--dsin-muted); font-size: 10px; line-height: 1.3; }
 .neighborhood-boundary-tooltip {
   border: 1px solid var(--dsin-charcoal);
   border-radius: 6px;

@@ -104,6 +104,79 @@ def health():
     return {"status": "ok", "database": bool(rows and rows[0]["ok"] == 1)}
 
 
+@app.get("/api/agentes")
+def list_agentes(em: datetime | None = None):
+    rows = fetch_all(
+        """
+        SELECT a.id_agente AS id, a.nome, a.matricula, a.cargo,
+               a.ativo_cadastro,
+               o.id_orgao AS orgao_id, o.nome AS orgao_nome, o.sigla AS orgao_sigla,
+               turno.id_turno AS turno_id,
+               CASE WHEN %s IS NOT NULL AND turno.id_turno IS NOT NULL THEN 'em_atividade'
+                    ELSE turno.status END AS turno_status,
+               turno.inicio_previsto AS turno_inicio_previsto,
+               turno.fim_previsto AS turno_fim_previsto,
+               turno.id_equipamento AS veiculo_id,
+               veiculo.numero_serie AS veiculo_numero_serie,
+               veiculo.marca AS veiculo_marca, veiculo.modelo AS veiculo_modelo,
+               veiculo_tipo.nome AS veiculo_tipo,
+               CAST(COALESCE(pos.latitude, veiculo_local.latitude, base.latitude) AS DOUBLE) AS latitude,
+               CAST(COALESCE(pos.longitude, veiculo_local.longitude, base.longitude) AS DOUBLE) AS longitude,
+               COALESCE(veiculo_local.logradouro, base.logradouro) AS logradouro,
+               COALESCE(veiculo_local.referencia, base.referencia) AS referencia,
+               COALESCE(veiculo_bairro.nome, base_bairro.nome) AS bairro,
+               COALESCE(veiculo_regiao.nome, base_regiao.nome) AS regiao,
+               COALESCE(veiculo_local.cidade, base.cidade) AS cidade,
+               COALESCE(veiculo_local.uf, base.uf) AS uf,
+               COALESCE(veiculo_local.cep, base.cep) AS cep,
+               pos.registrado_em AS posicao_registrada_em,
+               CASE WHEN pos.id_posicao IS NOT NULL THEN 'gps_veiculo'
+                    WHEN turno.id_equipamento IS NOT NULL AND veiculo_local.latitude IS NOT NULL THEN 'base_veiculo'
+                    ELSE 'base_agente' END AS origem_posicao
+        FROM agentes a
+        JOIN orgaos o ON o.id_orgao = a.id_orgao
+        LEFT JOIN localizacoes base ON base.id_localizacao = a.id_localizacao_base
+        LEFT JOIN bairros base_bairro ON base_bairro.id_bairro = base.id_bairro
+        LEFT JOIN regioes base_regiao ON base_regiao.id_regiao = base_bairro.id_regiao
+        LEFT JOIN turnos_agente turno ON turno.id_turno = (
+            SELECT t.id_turno
+            FROM turnos_agente t
+            WHERE t.id_agente = a.id_agente
+              AND (
+                (%s IS NULL AND t.status IN ('em_atividade', 'programado'))
+                OR (
+                  %s IS NOT NULL
+                  AND COALESCE(t.inicio_real, t.inicio_previsto) <= %s
+                  AND COALESCE(t.fim_real, t.fim_previsto) >= %s
+                )
+              )
+            ORDER BY CASE t.status WHEN 'em_atividade' THEN 0 WHEN 'programado' THEN 1 ELSE 2 END,
+                     t.inicio_previsto DESC, t.id_turno DESC
+            LIMIT 1
+        )
+        LEFT JOIN equipamentos veiculo ON veiculo.id_equipamento = turno.id_equipamento
+        LEFT JOIN tipos_equipamento veiculo_tipo ON veiculo_tipo.id_tipo = veiculo.id_tipo
+        LEFT JOIN localizacoes veiculo_local ON veiculo_local.id_localizacao = veiculo.id_localizacao
+        LEFT JOIN bairros veiculo_bairro ON veiculo_bairro.id_bairro = veiculo_local.id_bairro
+        LEFT JOIN regioes veiculo_regiao ON veiculo_regiao.id_regiao = veiculo_bairro.id_regiao
+        LEFT JOIN posicoes_equipamento pos ON pos.id_posicao = (
+            SELECT p.id_posicao
+            FROM posicoes_equipamento p
+            WHERE p.id_equipamento = veiculo.id_equipamento
+              AND p.id_viagem IS NOT NULL
+              AND (%s IS NULL OR p.registrado_em <= %s)
+            ORDER BY p.registrado_em DESC, p.id_posicao DESC
+            LIMIT 1
+        )
+        ORDER BY a.id_agente
+        """,
+        (em, em, em, em, em, em, em),
+    )
+    for row in rows:
+        row["ativo_cadastro"] = bool(row["ativo_cadastro"])
+    return rows
+
+
 @app.get("/api/equipamentos")
 def list_equipamentos(em: datetime | None = None):
     if em is not None:

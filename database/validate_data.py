@@ -111,6 +111,38 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
           str(sum(row["id_situacao"] == 7 and row["instalado_em"] is None for row in eq.values())))
     mobile = {eid for eid, row in eq.items() if types[row["id_tipo"]]["mobilidade"] == "movel"}
     trips = {r["id_viagem"]: r for r in tables["viagens"]}
+    agents = {r["id_agente"]: r for r in tables.get("agentes", [])}
+    shifts = tables.get("turnos_agente", [])
+    allowed_vehicle_capacity = {2: 1, 8: 1, 9: 2, 10: 2, 11: 2}
+    open_shifts = [row for row in shifts if row["status"] != "encerrado"]
+    linked_agents_per_vehicle = defaultdict(int)
+    shifts_valid = True
+    for shift in open_shifts:
+        vehicle_id = shift.get("id_equipamento")
+        vehicle = eq.get(vehicle_id)
+        if (shift["id_agente"] not in agents or vehicle is None
+                or vehicle["id_tipo"] not in allowed_vehicle_capacity
+                or vehicle["id_situacao"] != 1
+                or shift["status"] not in ("em_atividade", "programado")):
+            shifts_valid = False
+            continue
+        linked_agents_per_vehicle[vehicle_id] += 1
+    capacity_valid = all(
+        count <= allowed_vehicle_capacity[eq[vehicle_id]["id_tipo"]]
+        for vehicle_id, count in linked_agents_per_vehicle.items()
+    )
+    check("60 non-ended shifts linked to operational vehicles",
+          len(open_shifts) == 60 and shifts_valid,
+          f"{len(open_shifts)} shifts; {sum(row['status'] == 'em_atividade' for row in open_shifts)} active; {sum(row['status'] == 'programado' for row in open_shifts)} scheduled")
+    check("one generated shift per agent",
+          len(shifts) == len(agents) and len({row["id_agente"] for row in shifts}) == len(shifts),
+          f"{len(shifts)} shifts; {len({row['id_agente'] for row in shifts})} distinct agents")
+    check("agent capacity per vehicle respected",
+          capacity_valid and any(count == 2 for count in linked_agents_per_vehicle.values()),
+          f"{len(linked_agents_per_vehicle)} occupied vehicles; max {max(linked_agents_per_vehicle.values(), default=0)} agents per vehicle")
+    check("non-ended shifts use active agents",
+          all(agents[row["id_agente"]]["ativo_cadastro"] == 1 for row in open_shifts if row["id_agente"] in agents),
+          str(sum(agents[row["id_agente"]]["ativo_cadastro"] != 1 for row in open_shifts if row["id_agente"] in agents)))
     positions_by_trip = defaultdict(list)
     for row in tables["posicoes_equipamento"]:
         if row["id_viagem"] is not None: positions_by_trip[row["id_viagem"]].append(row)
@@ -213,7 +245,9 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
                  ("equipamentos","id_localizacao","localizacoes"),("equipamentos","id_situacao","situacoes_equipamento"),
                  ("viagens","id_equipamento","equipamentos"),("posicoes_equipamento","id_equipamento","equipamentos"),
                  ("posicoes_equipamento","id_viagem","viagens"),("agentes","id_orgao","orgaos"),
-                 ("agentes","id_localizacao_base","localizacoes"),("ocorrencias","id_localizacao","localizacoes"),
+                 ("agentes","id_localizacao_base","localizacoes"),("turnos_agente","id_agente","agentes"),
+                 ("turnos_agente","id_equipamento","equipamentos"),("turnos_agente","id_regiao","regioes"),
+                 ("ocorrencias","id_localizacao","localizacoes"),
                  ("ocorrencias","id_orgao","orgaos"),("ocorrencias","id_equipamento","equipamentos"),
                  ("alertas","id_equipamento","equipamentos"),("alertas","id_agente","agentes"),
                  ("alertas","id_ocorrencia","ocorrencias"),("alertas","id_regiao","regioes")]
@@ -261,6 +295,31 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     check("valores da migração iguais ao seed",
           migration_path.exists() and migration_values == seed_values_by_name,
           f"{len(migration_values)} valores na migração; {len(seed_values_by_name)} no seed")
+
+    agent_migration_path = seed_path.with_name("migrate_agent_vehicle_shifts.sql")
+    agent_migration_assignments = {}
+    if agent_migration_path.exists():
+        agent_migration_sql = agent_migration_path.read_text(encoding="utf-8")
+        assignment_match = re.search(
+            r"INSERT INTO migration_agent_vehicle_assignments \(([^)]*)\) VALUES\s*(.*?);",
+            agent_migration_sql,
+            re.S,
+        )
+        if assignment_match:
+            columns = re.findall(r"`([^`]+)`", assignment_match.group(1))
+            if not columns:
+                columns = [column.strip() for column in assignment_match.group(1).split(",")]
+            for row in _parse_value_list(assignment_match.group(2)):
+                parsed = dict(zip(columns, row))
+                agent_migration_assignments[parsed["id_agente"]] = (
+                    parsed["id_equipamento"], parsed["id_regiao"], parsed["status"])
+    seed_agent_assignments = {
+        row["id_agente"]: (row["id_equipamento"], row["id_regiao"], row["status"])
+        for row in shifts if row["status"] != "encerrado"
+    }
+    check("agent shift migration matches seed",
+          agent_migration_path.exists() and agent_migration_assignments == seed_agent_assignments,
+          f"{len(agent_migration_assignments)} migration assignments; {len(seed_agent_assignments)} in seed")
 
     chronology_ok = True
     for trip_id, rows in positions_by_trip.items():

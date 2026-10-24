@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react';
-import { AttributeFilterOption, AttributeFilterState, LocationFilters } from '../types';
+import { AgentFilterState, AttributeFilterOption, AttributeFilterState, LocationFilters } from '../types';
+import AgentFilters from './AgentFilters';
 import EquipmentAttributeFilters from './EquipmentAttributeFilters';
 
 type FilterOption = { id: number; label: string };
@@ -15,6 +16,12 @@ type FilterPanelProps = {
   onExpandedChange: (expanded: boolean) => void;
   types: CheckboxGroupProps;
   situations: CheckboxGroupProps;
+  agents: {
+    value: AgentFilterState;
+    organizations: FilterOption[];
+    roles: string[];
+    onChange: (value: AgentFilterState) => void;
+  };
   location: {
     value: LocationFilters;
     options: {
@@ -96,6 +103,7 @@ export default function FilterPanel({
   onExpandedChange,
   types,
   situations,
+  agents,
   location,
   attributes,
   position,
@@ -171,6 +179,12 @@ export default function FilterPanel({
               options={situations.options}
               selectedIds={situations.selectedIds}
               onChange={situations.onChange}
+            />
+            <AgentFilters
+              value={agents.value}
+              organizations={agents.organizations}
+              roles={agents.roles}
+              onChange={agents.onChange}
             />
             <details className="equipment-filter-accordion equipment-location-filters" aria-label="Filtros de localização">
               <summary>Localização</summary>

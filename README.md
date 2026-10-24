@@ -5,7 +5,7 @@ Aplicação local dividida em frontend React, API FastAPI e banco MySQL 8.0. O C
 ## Estrutura
 
 - `front/`: painel React e configuração Nginx.
-- `api/`: API FastAPI para equipamentos, viagens e posições GPS.
+- `api/`: API FastAPI para equipamentos, viagens, posições GPS e agentes em turno.
 - `database/`: schema MySQL, DER, geradores, validador e `seed.sql`.
 - `docker-compose.yml`: serviços, rede, portas, volume persistente e ordem de inicialização.
 
@@ -24,7 +24,7 @@ Endereços padrão:
 - API e documentação: <http://localhost:8000/docs>
 - MySQL: `localhost:3307` (database `fogo`)
 
-O frontend busca os equipamentos pela API em `/api/equipamentos`; o Nginx encaminha as chamadas para o serviço `api`. A API também expõe `/api/viagens` e `/api/viagens/{id}/posicoes`.
+O frontend busca os equipamentos pela API em `/api/equipamentos`; o Nginx encaminha as chamadas para o serviço `api`. A API também expõe `/api/viagens`, `/api/viagens/{id}/posicoes` e `/api/agentes`. A posição de um agente em turno acompanha o GPS do veículo vinculado.
 
 O MySQL executa `database/schema.sql` e `database/seed.sql` somente quando o volume `fogo_mysql_data` está vazio. `docker compose down` preserva o banco. Para não perder dados locais, não remova o volume sem intenção explícita.
 

@@ -1,4 +1,46 @@
-export type Aba = 'mapa' | 'lista';
+export type Aba = 'mapa' | 'lista' | 'agentes';
+
+export type AgentShiftStatus = 'em_atividade' | 'programado' | 'sem_turno';
+export type AgentRegistrationStatus = 'ativo' | 'inativo';
+
+export interface AgentFilterState {
+  showOnMap: boolean;
+  organizationIds: number[] | null;
+  roles: string[] | null;
+  registrationStatuses: AgentRegistrationStatus[] | null;
+  shiftStatuses: AgentShiftStatus[] | null;
+}
+
+export interface Agente {
+  id: number;
+  nome: string;
+  matricula: string;
+  cargo: string;
+  ativo_cadastro: boolean;
+  orgao_id: number;
+  orgao_nome: string;
+  orgao_sigla: string | null;
+  turno_id: number | null;
+  turno_status: 'em_atividade' | 'programado' | null;
+  turno_inicio_previsto: string | null;
+  turno_fim_previsto: string | null;
+  veiculo_id: number | null;
+  veiculo_numero_serie: string | null;
+  veiculo_marca: string | null;
+  veiculo_modelo: string | null;
+  veiculo_tipo: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  logradouro: string | null;
+  referencia: string | null;
+  bairro: string | null;
+  regiao: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
+  posicao_registrada_em: string | null;
+  origem_posicao: 'gps_veiculo' | 'base_veiculo' | 'base_agente';
+}
 
 export interface LocationFilters {
   bairro: string;

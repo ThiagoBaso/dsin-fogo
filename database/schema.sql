@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS agentes (
 CREATE TABLE IF NOT EXISTS turnos_agente (
   id_turno INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   id_agente INT UNSIGNED NOT NULL,
+  id_equipamento INT UNSIGNED,
   id_regiao INT UNSIGNED NOT NULL,
   inicio_previsto DATETIME NOT NULL,
   fim_previsto DATETIME NOT NULL,
@@ -151,9 +152,12 @@ CREATE TABLE IF NOT EXISTS turnos_agente (
   status ENUM('programado','em_atividade','encerrado') NOT NULL,
   KEY ix_turno_agente_inicio (id_agente, inicio_previsto),
   KEY ix_turno_regiao_inicio (id_regiao, inicio_previsto),
+  KEY ix_turno_equipamento_status_inicio (id_equipamento, status, inicio_previsto),
   CONSTRAINT fk_turno_agente FOREIGN KEY (id_agente) REFERENCES agentes(id_agente),
+  CONSTRAINT fk_turno_equipamento FOREIGN KEY (id_equipamento) REFERENCES equipamentos(id_equipamento),
   CONSTRAINT fk_turno_regiao FOREIGN KEY (id_regiao) REFERENCES regioes(id_regiao),
-  CONSTRAINT chk_turno_periodo CHECK (fim_previsto > inicio_previsto)
+  CONSTRAINT chk_turno_periodo CHECK (fim_previsto > inicio_previsto),
+  CONSTRAINT chk_turno_veiculo CHECK (status = 'encerrado' OR id_equipamento IS NOT NULL)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS viagens (

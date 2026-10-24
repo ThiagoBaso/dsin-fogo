@@ -6,7 +6,7 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 
 - `DER_FOGO.dbml`: modelo logico.
 - `schema.sql`: schema MySQL 8.0 / InnoDB / utf8mb4.
-- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql` and `migrate_equipment_attributes.sql`: idempotent upgrades for an existing Compose database volume.
+- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql` and `migrate_agent_vehicle_shifts.sql`: idempotent upgrades for an existing Compose database volume.
 - `generate_data.py`: gera a massa SQL de demonstracao.
 - `generate_neighborhood_boundaries.py`: gera o GeoJSON de setores demonstrativos usando quarteiroes delimitados por ruas do OpenStreetMap.
 - `generate_routes.py`: cria e interpola rotas pela malha viaria OpenStreetMap de Marilia.
@@ -40,10 +40,12 @@ A primeira geracao requer acesso ao OpenStreetMap/Overpass para obter a malha, q
 
 O GeoJSON dos setores e gerado a partir dessa mesma malha viaria: quarteiroes fechados pelas ruas sao agrupados em 40 setores sinteticos. As divisorias internas seguem vias; o limite externo e um fecho aproximado. Os setores continuam ficticios e nao devem ser tratados como limites oficiais de bairros.
 
-O Docker Compose monta `schema.sql` e `seed.sql` como scripts de inicializacao do MySQL. O MySQL executa esses scripts somente quando cria um volume vazio. Para um volume existente, o servico `database-migrate` aplica as mudancas de viagens, do catalogo, dos enderecos, das situacoes e dos atributos de equipamento de forma idempotente. A migracao de atributos inclui o catalogo estendido e valores sinteticos coerentes com o seed, sem apagar equipamentos. A API aguarda as migracoes concluirem. Nao remova `fogo_mysql_data`, pois isso apagaria os dados.
+O Docker Compose monta `schema.sql` e `seed.sql` para inicializar um banco vazio. Em um volume existente, `database-migrate` aplica de forma idempotente as migrações de viagens, catálogo, endereços, situações, atributos e turnos de agentes. A migração de atributos inclui o catálogo e valores sintéticos sem apagar equipamentos. A API aguarda as migrações. Não remova `fogo_mysql_data`, pois isso apagaria os dados.
 
 Para validar o seed offline, conferir as viagens ativas e verificar os limites geograficos, execute `py database\validate_data.py --seed-sql database\seed.sql`. Para validar uma base importada, configure `MYSQL_*` e execute `py database\validate_data.py`.
 
 ## Observacoes
 
 O grafo OSM e geografico. Equipamentos, agentes, eventos, locais cadastrados, trajetos e padroes analiticos sao sinteticos. Bairros, setores e regioes nao sao divisoes oficiais de Marilia. A massa usa IDs deterministas e data corrente para que as viagens ativas estejam atuais no momento da geracao.
+
+Turnos de agentes: o gerador cria turnos em atividade e programados, sem encerramento e vinculados a veículos operacionais. Viaturas comportam até dois agentes; radar móvel e motocicleta comportam um. A API `/api/agentes` calcula a posição compartilhada usando o GPS mais recente do veículo. A tela é somente para consulta.

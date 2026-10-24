@@ -134,6 +134,7 @@ Table agentes {
 Table turnos_agente {
   id_turno int [pk, increment]
   id_agente int [not null]
+  id_equipamento int [note: 'Obrigatorio para turnos programados ou em atividade; multiplos agentes podem compartilhar o mesmo veiculo.']
   id_regiao int [not null]
   inicio_previsto datetime [not null]
   fim_previsto datetime [not null]
@@ -242,6 +243,7 @@ Ref: manutencoes.id_equipamento > equipamentos.id_equipamento
 Ref: agentes.id_orgao > orgaos.id_orgao
 Ref: agentes.id_localizacao_base > localizacoes.id_localizacao
 Ref: turnos_agente.id_agente > agentes.id_agente
+Ref: turnos_agente.id_equipamento > equipamentos.id_equipamento
 Ref: turnos_agente.id_regiao > regioes.id_regiao
 Ref: viagens.id_equipamento > equipamentos.id_equipamento
 Ref: posicoes_equipamento.id_equipamento > equipamentos.id_equipamento

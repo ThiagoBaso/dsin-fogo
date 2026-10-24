@@ -134,6 +134,91 @@ COMMIT;
     return "\n".join(parts)
 
 
+def agent_vehicle_migration_sql(assignments):
+    """Link demo shifts to vehicles and add the relationship on persistent volumes."""
+    parts = ["""-- Add vehicle assignments to active demo agent shifts without replacing closed shift history.
+DROP PROCEDURE IF EXISTS migrate_agent_vehicle_shifts;
+DELIMITER //
+CREATE PROCEDURE migrate_agent_vehicle_shifts()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'turnos_agente' AND column_name = 'id_equipamento'
+  ) THEN
+    ALTER TABLE turnos_agente ADD COLUMN id_equipamento INT UNSIGNED NULL AFTER id_agente;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = 'turnos_agente' AND index_name = 'ix_turno_equipamento_status_inicio'
+  ) THEN
+    ALTER TABLE turnos_agente ADD KEY ix_turno_equipamento_status_inicio (id_equipamento, status, inicio_previsto);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = DATABASE() AND table_name = 'turnos_agente' AND constraint_name = 'fk_turno_equipamento'
+  ) THEN
+    ALTER TABLE turnos_agente ADD CONSTRAINT fk_turno_equipamento
+      FOREIGN KEY (id_equipamento) REFERENCES equipamentos(id_equipamento);
+  END IF;
+END//
+DELIMITER ;
+CALL migrate_agent_vehicle_shifts();
+DROP PROCEDURE migrate_agent_vehicle_shifts;
+
+CREATE TEMPORARY TABLE migration_agent_vehicle_assignments (
+  id_agente INT UNSIGNED NOT NULL PRIMARY KEY,
+  id_equipamento INT UNSIGNED NOT NULL,
+  id_regiao INT UNSIGNED NOT NULL,
+  status ENUM('programado','em_atividade') NOT NULL
+) ENGINE=InnoDB;
+""",
+        insert("migration_agent_vehicle_assignments", ["id_agente", "id_equipamento", "id_regiao", "status"], assignments)
+        .replace("INSERT INTO `migration_agent_vehicle_assignments`", "INSERT INTO migration_agent_vehicle_assignments"),
+        """UPDATE turnos_agente AS turno
+JOIN migration_agent_vehicle_assignments AS assignment ON assignment.id_agente = turno.id_agente
+SET turno.id_equipamento = assignment.id_equipamento
+WHERE turno.status <> 'encerrado' AND turno.id_equipamento IS NULL;
+
+INSERT INTO turnos_agente
+  (id_agente, id_equipamento, id_regiao, inicio_previsto, fim_previsto, inicio_real, fim_real, status)
+SELECT agent.id_agente, assignment.id_equipamento, assignment.id_regiao,
+       CASE WHEN assignment.status = 'em_atividade' THEN CURRENT_TIMESTAMP - INTERVAL 2 HOUR
+            ELSE CURRENT_TIMESTAMP + INTERVAL 1 DAY END,
+       CASE WHEN assignment.status = 'em_atividade' THEN CURRENT_TIMESTAMP + INTERVAL 6 HOUR
+            ELSE CURRENT_TIMESTAMP + INTERVAL 1 DAY + INTERVAL 8 HOUR END,
+       CASE WHEN assignment.status = 'em_atividade' THEN CURRENT_TIMESTAMP - INTERVAL 2 HOUR ELSE NULL END,
+       NULL,
+       assignment.status
+FROM migration_agent_vehicle_assignments AS assignment
+JOIN agentes AS agent ON agent.id_agente = assignment.id_agente
+WHERE agent.ativo_cadastro = 1
+  AND agent.matricula LIKE 'DEMO-AG-%'
+  AND NOT EXISTS (
+    SELECT 1 FROM turnos_agente AS current_shift
+    WHERE current_shift.id_agente = agent.id_agente AND current_shift.status <> 'encerrado'
+  );
+
+DROP TEMPORARY TABLE migration_agent_vehicle_assignments;
+
+DROP PROCEDURE IF EXISTS add_agent_shift_vehicle_check;
+DELIMITER //
+CREATE PROCEDURE add_agent_shift_vehicle_check()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = DATABASE() AND table_name = 'turnos_agente' AND constraint_name = 'chk_turno_veiculo'
+  ) THEN
+    ALTER TABLE turnos_agente ADD CONSTRAINT chk_turno_veiculo
+      CHECK (status = 'encerrado' OR id_equipamento IS NOT NULL);
+  END IF;
+END//
+DELIMITER ;
+CALL add_agent_shift_vehicle_check();
+DROP PROCEDURE add_agent_shift_vehicle_check;
+"""]
+    return "\n".join(parts)
+
+
 def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = False):
     rng = random.Random(seed)
     graph = load_graph(graph_path)
@@ -325,12 +410,57 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     add("manutencoes", ["id_manutencao", "id_equipamento", "modalidade", "prioridade", "status", "descricao", "aberta_em", "prevista_para", "iniciada_em", "concluida_em"], maintenance)
 
     agents = [(i, rng.choice([1, 2, 3, 4]), rng.randint(1, 350), f"DEMO-AG-{i:04d}", f"Agente Demonstrativo {i:03d}", rng.choice(["agente de trânsito", "guarda municipal", "policial", "fiscal"]), i <= 94) for i in range(1, 101)]
+    role_by_organization = {
+        1: "agente de tr\u00e2nsito",
+        2: "guarda municipal",
+        3: "policial",
+        4: "fiscal",
+    }
+    agents = [(*agent[:5], role_by_organization[agent[1]], agent[6]) for agent in agents]
     add("agentes", ["id_agente", "id_orgao", "id_localizacao_base", "matricula", "nome", "cargo", "ativo_cadastro"], agents)
+
+    capacity_by_type = {2: 1, 8: 1, 9: 2, 10: 2, 11: 2}
+    eligible_vehicles = [
+        (row[0], capacity_by_type[row[1]])
+        for row in equipment_rows
+        if row[1] in capacity_by_type and row[4] == 1
+    ]
+    agent_assignment_rng = random.Random(seed ^ 0xF060)
+    agent_assignment_rng.shuffle(eligible_vehicles)
+    vehicle_seats = [equipment_id for equipment_id, capacity in eligible_vehicles for _ in range(capacity)]
+    active_agent_ids = [agent[0] for agent in agents if agent[6]]
+    agent_assignment_rng.shuffle(active_agent_ids)
+    non_ended_count = min(60, len(vehicle_seats), len(active_agent_ids))
+    active_shift_count = (non_ended_count * 3 + 3) // 4
+    agent_assignments = {
+        agent_id: (vehicle_seats[index], "em_atividade" if index < active_shift_count else "programado")
+        for index, agent_id in enumerate(active_agent_ids[:non_ended_count])
+    }
+
     shifts = []
     for i in range(1, 101):
-        start = NOW - timedelta(days=rng.randint(0, 30), hours=rng.randint(0, 8))
-        shifts.append((i, i, rng.randint(1, 10), start, start + timedelta(hours=8), start, start + timedelta(hours=8), "encerrado"))
-    add("turnos_agente", ["id_turno", "id_agente", "id_regiao", "inicio_previsto", "fim_previsto", "inicio_real", "fim_real", "status"], shifts)
+        days_back = rng.randint(0, 30)
+        hours_back = rng.randint(0, 8)
+        region_id = rng.randint(1, 10)
+        assignment = agent_assignments.get(i)
+        if assignment is None:
+            status = "encerrado"
+            vehicle_id = None
+            start = NOW - timedelta(days=days_back, hours=hours_back)
+            end = start + timedelta(hours=8)
+            actual_start, actual_end = start, end
+        else:
+            vehicle_id, status = assignment
+            if status == "em_atividade":
+                start = NOW - timedelta(hours=2)
+                end = NOW + timedelta(hours=6)
+                actual_start, actual_end = start, None
+            else:
+                start = NOW + timedelta(days=1, hours=i % 5)
+                end = start + timedelta(hours=8)
+                actual_start, actual_end = None, None
+        shifts.append((i, i, vehicle_id, region_id, start, end, actual_start, actual_end, status))
+    add("turnos_agente", ["id_turno", "id_agente", "id_equipamento", "id_regiao", "inicio_previsto", "fim_previsto", "inicio_real", "fim_real", "status"], shifts)
 
     trip_rows, positions = [], []
     min_positions_per_trip = 0
@@ -452,7 +582,25 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     attributes_migration_temp.write_text(
         equipment_attributes_migration_sql(attribute_definitions, attribute_migration_values), encoding="utf-8")
     attributes_migration_temp.replace(attributes_migration_path)
-    summary = {**counts, "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type), "viagens_em_andamento": active_trip_count, "posicoes_min_por_viagem": min_positions_per_trip, "seed": seed}
+    agent_migration_assignments = [
+        (row[1], row[2], row[3], row[8])
+        for row in shifts if row[8] != "encerrado"
+    ]
+    agent_migration_path = out.with_name("migrate_agent_vehicle_shifts.sql")
+    agent_migration_temp = agent_migration_path.with_suffix(agent_migration_path.suffix + ".tmp")
+    agent_migration_temp.write_text(
+        agent_vehicle_migration_sql(agent_migration_assignments), encoding="utf-8")
+    agent_migration_temp.replace(agent_migration_path)
+    summary = {
+        **counts,
+        "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type),
+        "viagens_em_andamento": active_trip_count,
+        "turnos_em_atividade": sum(row[8] == "em_atividade" for row in shifts),
+        "turnos_programados": sum(row[8] == "programado" for row in shifts),
+        "turnos_vinculados_a_veiculos": len(agent_migration_assignments),
+        "posicoes_min_por_viagem": min_positions_per_trip,
+        "seed": seed,
+    }
     LOG.info("Wrote %s", out)
     for key, value in summary.items():
         LOG.info("%s: %s", key, value)

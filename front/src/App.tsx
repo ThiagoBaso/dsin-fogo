@@ -3,10 +3,14 @@ import './App.css';
 import Map from './components/Map';
 import TopBarMap from './components/TopBarMap';
 import ItemList from './components/ItemList';
+import AgentList from './components/AgentList';
+import AgentDetails from './components/AgentDetails';
 import EquipmentDetails from './components/EquipmentDetails';
 import FilterPanel from './components/FilterPanel';
 import {
   Aba,
+  Agente,
+  AgentFilterState,
   AttributeFilterOption,
   AttributeFilterState,
   LocationFilters,
@@ -37,6 +41,8 @@ function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
   const [exibirContornoBairros, setExibirContornoBairros] = useState(false);
   const [pontos, setPontos] = useState<Ponto[]>([]);
+  const [agentes, setAgentes] = useState<Agente[]>([]);
+  const [erroAgentes, setErroAgentes] = useState('');
   const [rotas, setRotas] = useState<RotaVeiculo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -53,6 +59,14 @@ function App() {
   const [atributosAplicados, setAtributosAplicados] = useState<AttributeFilterState>({});
   const [selecionadosIds, setSelecionadosIds] = useState<number[]>([]);
   const [detalhesId, setDetalhesId] = useState<number | null>(null);
+  const [detalhesAgenteId, setDetalhesAgenteId] = useState<number | null>(null);
+  const [filtrosAgentes, setFiltrosAgentes] = useState<AgentFilterState>({
+    showOnMap: false,
+    organizationIds: null,
+    roles: null,
+    registrationStatuses: null,
+    shiftStatuses: null,
+  });
   const [exibirApenasSelecionados, setExibirApenasSelecionados] = useState(false);
   const [permitirMultisselecao, setPermitirMultisselecao] = useState(false);
   const [filtrosLocalizacao, setFiltrosLocalizacao] = useState<LocationFilters>(emptyLocationFilters);
@@ -65,8 +79,9 @@ function App() {
   const painelDetalhes = useRef<HTMLElement>(null);
 
   const opcoesLocalizacao = useMemo(() => {
+    const locations = [...pontos, ...agentes];
     const valores = (campo: 'bairro' | 'regiao' | 'cidade' | 'uf') => Array.from(new Set(
-      pontos.map((ponto) => ponto[campo]).filter((valor): valor is string => Boolean(valor)),
+      locations.map((item) => item[campo]).filter((valor): valor is string => Boolean(valor)),
     )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
     return {
@@ -75,7 +90,16 @@ function App() {
       cidades: valores('cidade'),
       ufs: valores('uf'),
     };
-  }, [pontos]);
+  }, [pontos, agentes]);
+  const opcoesOrgaosAgentes = useMemo(() => agentes.reduce<{ id: number; label: string }[]>((options, agente) => {
+    if (!options.some((option) => option.id === agente.orgao_id)) {
+      options.push({ id: agente.orgao_id, label: agente.orgao_sigla || agente.orgao_nome });
+    }
+    return options;
+  }, []).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')), [agentes]);
+  const opcoesCargosAgentes = useMemo(() => Array.from(new Set(
+    agentes.map((agente) => agente.cargo),
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR')), [agentes]);
   const opcoesAtributos = useMemo<AttributeFilterOption[]>(() => {
     const attributes: Record<string, AttributeFilterOption> = {};
     pontos.forEach((ponto) => {
@@ -154,9 +178,39 @@ function App() {
     ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
     : pontosFiltrados;
   const pontoDetalhes = pontosFiltrados.find((ponto) => ponto.id === detalhesId) || null;
+  const agentesFiltrados = useMemo(() => {
+    const busca = localizacaoAplicada.busca.trim().toLocaleLowerCase('pt-BR');
+    return agentes.filter((agente) => {
+      const shiftStatus = agente.turno_status ?? 'sem_turno';
+      const correspondeLocalizacao = (!localizacaoAplicada.bairro || agente.bairro === localizacaoAplicada.bairro)
+        && (!localizacaoAplicada.regiao || agente.regiao === localizacaoAplicada.regiao)
+        && (!localizacaoAplicada.cidade || agente.cidade === localizacaoAplicada.cidade)
+        && (!localizacaoAplicada.uf || agente.uf === localizacaoAplicada.uf)
+        && (!busca || [agente.logradouro, agente.referencia, agente.cep]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase('pt-BR')
+          .includes(busca));
+      return (filtrosAgentes.organizationIds === null || filtrosAgentes.organizationIds.includes(agente.orgao_id))
+        && (filtrosAgentes.roles === null || filtrosAgentes.roles.includes(agente.cargo))
+        && (filtrosAgentes.registrationStatuses === null
+          || filtrosAgentes.registrationStatuses.includes(agente.ativo_cadastro ? 'ativo' : 'inativo'))
+        && (filtrosAgentes.shiftStatuses === null || filtrosAgentes.shiftStatuses.includes(shiftStatus))
+        && correspondeLocalizacao;
+    });
+  }, [agentes, filtrosAgentes, localizacaoAplicada]);
+  const agentesMapa = filtrosAgentes.showOnMap ? agentesFiltrados : [];
+  const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
   function visualizarEquipamento(ponto: Ponto) {
+    setDetalhesAgenteId(null);
     setDetalhesId(ponto.id);
+    painelDetalhes.current?.scrollTo({ top: 0 });
+  }
+
+  function visualizarAgente(agente: Agente) {
+    setDetalhesId(null);
+    setDetalhesAgenteId(agente.id);
     painelDetalhes.current?.scrollTo({ top: 0 });
   }
 
@@ -192,6 +246,13 @@ function App() {
     setSituacoesAplicadas(situacoesPadrao);
     setAtributosSelecionados({});
     setAtributosAplicados({});
+    setFiltrosAgentes({
+      showOnMap: false,
+      organizationIds: null,
+      roles: null,
+      registrationStatuses: null,
+      shiftStatuses: null,
+    });
     setFiltrosLocalizacao(emptyLocationFilters);
     setLocalizacaoAplicada(emptyLocationFilters);
     setExibirApenasSelecionados(false);
@@ -230,6 +291,32 @@ function App() {
       })
       .finally(() => {
         if (!controller.signal.aborted) setCarregando(false);
+      });
+
+    return () => controller.abort();
+  }, [dataHoraAplicada]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = dataHoraAplicada
+      ? `?em=${encodeURIComponent(dataHoraAplicada)}`
+      : '';
+
+    setErroAgentes('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/agentes${query}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<Agente[]>;
+      })
+      .then((dados) => {
+        setAgentes(dados);
+        setDetalhesAgenteId((idAtual) => idAtual !== null && dados.some((agente) => agente.id === idAtual) ? idAtual : null);
+      })
+      .catch((error: Error) => {
+        if (error.name !== 'AbortError') {
+          setAgentes([]);
+          setErroAgentes('Não foi possível carregar os agentes da API.');
+        }
       });
 
     return () => controller.abort();
@@ -279,6 +366,12 @@ function App() {
         onExpandedChange={setPainelExpandido}
         types={{ options: equipmentTypes, selectedIds: tiposSelecionados, onChange: setTiposSelecionados }}
         situations={{ options: equipmentSituationOptions, selectedIds: situacoesSelecionadas, onChange: setSituacoesSelecionadas }}
+        agents={{
+          value: filtrosAgentes,
+          organizations: opcoesOrgaosAgentes,
+          roles: opcoesCargosAgentes,
+          onChange: setFiltrosAgentes,
+        }}
         location={{ value: filtrosLocalizacao, options: opcoesLocalizacao, onChange: setFiltrosLocalizacao }}
         attributes={{
           options: opcoesAtributos,
@@ -316,6 +409,7 @@ function App() {
           abaAtiva={abaAtiva}
           onChange={setAbaAtiva}
         />
+        {erroAgentes && <p className="api-message api-error" role="alert">{erroAgentes}</p>}
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
@@ -325,6 +419,10 @@ function App() {
             rotas={rotas}
             ativo={abaAtiva === 'mapa'}
             onSelecionar={selecionarNoMapa}
+            agents={agentesMapa}
+            showAgents={filtrosAgentes.showOnMap}
+            selectedAgentId={detalhesAgenteId ?? 0}
+            onSelectAgent={visualizarAgente}
             selecionadosIds={selecionadosIds}
             exibirContornoBairros={exibirContornoBairros}
           />
@@ -346,9 +444,18 @@ function App() {
             }}
           />
         )}
+        {abaAtiva === 'agentes' && (
+          <AgentList
+            agents={agentesFiltrados}
+            selectedAgentId={detalhesAgenteId}
+            onSelect={visualizarAgente}
+          />
+        )}
       </div>
-      <aside className='rigth-painel' aria-label="Informações do equipamento" ref={painelDetalhes}>
-        <EquipmentDetails ponto={pontoDetalhes} dataHora={dataHoraAplicada} onClose={() => setDetalhesId(null)} />
+      <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : 'Informações do equipamento'} ref={painelDetalhes}>
+        {detalhesAgenteId !== null
+          ? <AgentDetails agente={agenteDetalhes} agentes={agentes} onClose={() => setDetalhesAgenteId(null)} />
+          : <EquipmentDetails ponto={pontoDetalhes} dataHora={dataHoraAplicada} onClose={() => setDetalhesId(null)} />}
       </aside>
     </div>
   );

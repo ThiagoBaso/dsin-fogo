@@ -1,6 +1,7 @@
 import { MapContainer, TileLayer } from 'react-leaflet';
 import MapResizeObserver from './map/MapResizeObserver';
 import EquipmentMarkers from './map/EquipmentMarkers';
+import AgentMarkers from './map/AgentMarkers';
 import NeighborhoodLayer from './map/NeighborhoodLayer';
 import RoutesLayer from './map/RoutesLayer';
 import 'leaflet/dist/leaflet.css';
@@ -13,6 +14,10 @@ export default function MapaMarilia({
   rotas = [],
   ativo,
   onSelecionar,
+  agents = [],
+  showAgents = false,
+  selectedAgentId = 0,
+  onSelectAgent,
   selecionadosIds = [],
   exibirContornoBairros = false,
 }) {
@@ -34,6 +39,9 @@ export default function MapaMarilia({
         selecionadosIds={selecionadosIds}
         onSelecionar={onSelecionar}
       />
+      {showAgents && (
+        <AgentMarkers agents={agents} selectedAgentId={selectedAgentId} onSelect={onSelectAgent} />
+      )}
     </MapContainer>
   );
 }
