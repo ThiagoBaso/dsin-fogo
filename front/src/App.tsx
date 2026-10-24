@@ -455,7 +455,13 @@ function App() {
       <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : 'Informações do equipamento'} ref={painelDetalhes}>
         {detalhesAgenteId !== null
           ? <AgentDetails agente={agenteDetalhes} agentes={agentes} onClose={() => setDetalhesAgenteId(null)} />
-          : <EquipmentDetails ponto={pontoDetalhes} dataHora={dataHoraAplicada} onClose={() => setDetalhesId(null)} />}
+          : <EquipmentDetails
+            ponto={pontoDetalhes}
+            dataHora={dataHoraAplicada}
+            agentes={agentes}
+            onSelectAgent={visualizarAgente}
+            onClose={() => setDetalhesId(null)}
+          />}
       </aside>
     </div>
   );

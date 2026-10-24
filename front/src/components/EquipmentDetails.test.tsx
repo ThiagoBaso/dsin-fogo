@@ -79,7 +79,7 @@ beforeEach(() => {
 });
 
 test('renders each equipment detail tab and its loaded content', async () => {
-  render(<EquipmentDetails ponto={ponto} dataHora={null} onClose={() => undefined} />);
+  render(<EquipmentDetails ponto={ponto} dataHora={null} agentes={[]} onSelectAgent={() => undefined} onClose={() => undefined} />);
 
   expect(await screen.findByText('SERIE-007')).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Responsável' })).toBeInTheDocument();

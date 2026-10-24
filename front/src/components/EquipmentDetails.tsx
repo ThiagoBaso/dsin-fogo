@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import type { Ponto } from '../types';
+import { useEffect, useState } from 'react';
+import type { Agente, Ponto } from '../types';
 import EquipmentInformationTab from './equipment-details/EquipmentInformationTab';
+import AgentTeamTab from './equipment-details/AgentTeamTab';
 import MaintenanceTab from './equipment-details/MaintenanceTab';
 import OccurrencesTab from './equipment-details/OccurrencesTab';
 import RouteHistoryTab from './equipment-details/RouteHistoryTab';
@@ -8,18 +9,27 @@ import { useEquipmentDetailsData } from './equipment-details/useEquipmentDetails
 import { useEquipmentRouteHistory } from './equipment-details/useEquipmentRouteHistory';
 import { detailTabs, type DetailTab } from './equipment-details/tabs';
 
+const agentVehicleTypeIds = [2, 8, 9, 10, 11];
+
 export default function EquipmentDetails({
   ponto,
   dataHora,
+  agentes,
+  onSelectAgent,
   onClose,
 }: {
   ponto: Ponto | null;
   dataHora: string | null;
+  agentes: Agente[];
+  onSelectAgent: (agent: Agente) => void;
   onClose: () => void;
 }) {
   const equipamentoId = ponto?.id;
+  const showCrewTab = ponto !== null && agentVehicleTypeIds.includes(ponto.tipo_id);
   const [tentativa, setTentativa] = useState(0);
   const [abaAtiva, setAbaAtiva] = useState<DetailTab>('identificacao');
+  const abasVisiveis = showCrewTab ? detailTabs : detailTabs.filter((tab) => tab.id !== 'equipe');
+  const abaExibida = !showCrewTab && abaAtiva === 'equipe' ? 'identificacao' : abaAtiva;
   const {
     detalhes,
     ocorrencias,
@@ -39,6 +49,10 @@ export default function EquipmentDetails({
     carregar: carregarHistorico,
   } = useEquipmentRouteHistory(equipamentoId, historicoAtivo);
   const tabPanelId = 'equipment-details-panel';
+
+  useEffect(() => {
+    if (!showCrewTab && abaAtiva === 'equipe') setAbaAtiva('identificacao');
+  }, [showCrewTab, abaAtiva]);
 
   return (
     <section className="equipment-details" aria-label="Detalhes do equipamento">
@@ -62,26 +76,26 @@ export default function EquipmentDetails({
       ) : (
         <>
           <div className="equipment-details-tabs" role="tablist" aria-label="Seções dos detalhes do equipamento">
-            {detailTabs.map((tab) => (
+            {abasVisiveis.map((tab) => (
               <button
                 key={tab.id}
                 id={`equipment-tab-${tab.id}`}
                 type="button"
                 role="tab"
-                aria-selected={abaAtiva === tab.id}
+                aria-selected={abaExibida === tab.id}
                 aria-controls={tabPanelId}
-                tabIndex={abaAtiva === tab.id ? 0 : -1}
+                tabIndex={abaExibida === tab.id ? 0 : -1}
                 onClick={() => setAbaAtiva(tab.id)}
                 onKeyDown={(event) => {
-                  const atualIndex = detailTabs.findIndex((item) => item.id === abaAtiva);
+                  const atualIndex = abasVisiveis.findIndex((item) => item.id === abaExibida);
                   let proximoIndex = atualIndex;
-                  if (event.key === 'ArrowRight') proximoIndex = (atualIndex + 1) % detailTabs.length;
-                  if (event.key === 'ArrowLeft') proximoIndex = (atualIndex - 1 + detailTabs.length) % detailTabs.length;
+                  if (event.key === 'ArrowRight') proximoIndex = (atualIndex + 1) % abasVisiveis.length;
+                  if (event.key === 'ArrowLeft') proximoIndex = (atualIndex - 1 + abasVisiveis.length) % abasVisiveis.length;
                   if (event.key === 'Home') proximoIndex = 0;
-                  if (event.key === 'End') proximoIndex = detailTabs.length - 1;
+                  if (event.key === 'End') proximoIndex = abasVisiveis.length - 1;
                   if (proximoIndex !== atualIndex) {
                     event.preventDefault();
-                    const proximaAba = detailTabs[proximoIndex];
+                    const proximaAba = abasVisiveis[proximoIndex];
                     setAbaAtiva(proximaAba.id);
                     event.currentTarget.parentElement
                       ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[proximoIndex]
@@ -93,27 +107,30 @@ export default function EquipmentDetails({
               </button>
             ))}
           </div>
-          <div id={tabPanelId} className="equipment-details-tabpanel" role="tabpanel" aria-labelledby={`equipment-tab-${abaAtiva}`}>
-            {abaAtiva === 'identificacao' && (
+          <div id={tabPanelId} className="equipment-details-tabpanel" role="tabpanel" aria-labelledby={`equipment-tab-${abaExibida}`}>
+            {abaExibida === 'identificacao' && (
               <EquipmentInformationTab tab="identificacao" ponto={ponto} detalhes={atual} dataHora={dataHora} />
             )}
-            {abaAtiva === 'posicao' && (
+            {abaExibida === 'posicao' && (
               <EquipmentInformationTab tab="posicao" ponto={ponto} detalhes={atual} dataHora={dataHora} />
             )}
-            {abaAtiva === 'atributos' && (
+            {abaExibida === 'atributos' && (
               <EquipmentInformationTab tab="atributos" ponto={ponto} detalhes={atual} dataHora={dataHora} />
             )}
-            {abaAtiva === 'ocorrencias' && (
+            {abaExibida === 'equipe' && (
+              <AgentTeamTab equipmentId={atual.id} agents={agentes} onSelectAgent={onSelectAgent} />
+            )}
+            {abaExibida === 'ocorrencias' && (
               <OccurrencesTab ocorrencias={ocorrencias} erro={erroOcorrencias} />
             )}
-            {abaAtiva === 'manutencao' && (
+            {abaExibida === 'manutencao' && (
               <MaintenanceTab
                 manutencoes={manutencoes}
                 erro={erroManutencoes}
                 onRetry={() => setTentativa((value) => value + 1)}
               />
             )}
-            {abaAtiva === 'historico' && (
+            {abaExibida === 'historico' && (
               <RouteHistoryTab
                 mobilidade={atual.mobilidade}
                 rotas={rotas}

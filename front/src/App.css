@@ -859,6 +859,59 @@
   margin: 0;
 }
 
+.equipment-agent-crew-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.equipment-agent-crew-card {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsin-border);
+  border-radius: 9px;
+  background: var(--dsin-surface);
+  color: var(--dsin-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.equipment-agent-crew-card:hover,
+.equipment-agent-crew-card:focus-visible {
+  border-color: var(--dsin-yellow);
+  background: var(--dsin-surface-subtle);
+}
+
+.equipment-agent-crew-card:focus-visible {
+  outline: 2px solid var(--dsin-ink);
+  outline-offset: 2px;
+}
+
+.equipment-agent-crew-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.equipment-agent-crew-heading > strong { color: var(--dsin-ink); font-size: 13px; }
+.equipment-agent-shift-status {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--dsin-surface-subtle);
+  color: var(--dsin-ink);
+  font-size: 10px;
+  font-weight: 600;
+}
+.equipment-agent-crew-name { font-size: 13px; font-weight: 600; }
+.equipment-agent-crew-role,
+.equipment-agent-crew-period { color: var(--dsin-muted); font-size: 11px; line-height: 1.4; }
+
 .equipment-detail-field + .equipment-detail-field {
   margin-top: 12px;
 }
