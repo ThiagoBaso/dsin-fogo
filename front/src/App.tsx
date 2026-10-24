@@ -5,8 +5,16 @@ import TopBarMap from './components/TopBarMap';
 import ItemList from './components/ItemList';
 import EquipmentDetails from './components/EquipmentDetails';
 import FilterPanel from './components/FilterPanel';
-import { Aba, LocationFilters, Ponto, RotaVeiculo } from './types';
+import {
+  Aba,
+  AttributeFilterOption,
+  AttributeFilterState,
+  LocationFilters,
+  Ponto,
+  RotaVeiculo,
+} from './types';
 import { equipmentSituations, equipmentTypes } from './equipmentCatalog';
+import { attributeLabels } from './components/equipment-details/labels';
 
 const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, situation]) => ({
   id: Number(id),
@@ -41,6 +49,8 @@ function App() {
   const [situacoesAplicadas, setSituacoesAplicadas] = useState<number[]>(
     equipmentSituationOptions.map((situation) => situation.id),
   );
+  const [atributosSelecionados, setAtributosSelecionados] = useState<AttributeFilterState>({});
+  const [atributosAplicados, setAtributosAplicados] = useState<AttributeFilterState>({});
   const [selecionadosIds, setSelecionadosIds] = useState<number[]>([]);
   const [detalhesId, setDetalhesId] = useState<number | null>(null);
   const [exibirApenasSelecionados, setExibirApenasSelecionados] = useState(false);
@@ -66,6 +76,33 @@ function App() {
       ufs: valores('uf'),
     };
   }, [pontos]);
+  const opcoesAtributos = useMemo<AttributeFilterOption[]>(() => {
+    const attributes: Record<string, AttributeFilterOption> = {};
+    pontos.forEach((ponto) => {
+      (ponto.atributos ?? []).forEach((atributo) => {
+        if (atributo.valor === null) return;
+        const key = `${ponto.tipo_id}:${atributo.nome}`;
+        const option = attributes[key] ?? {
+          key,
+          typeId: ponto.tipo_id,
+          typeLabel: equipmentTypes.find((type) => type.id === ponto.tipo_id)?.label ?? ponto.tipo,
+          name: atributo.nome,
+          label: attributeLabels[atributo.nome] ?? atributo.nome.replace(/_/g, ' '),
+          typeValue: atributo.tipo_valor,
+          unit: atributo.unidade,
+          values: [],
+        };
+        if (atributo.tipo_valor !== 'numero'
+          && !option.values.includes(atributo.valor as string | boolean)) {
+          option.values.push(atributo.valor as string | boolean);
+        }
+        attributes[key] = option;
+      });
+    });
+    return Object.values(attributes)
+      .map((option) => ({ ...option, values: option.values.sort((a, b) => String(a).localeCompare(String(b), 'pt-BR')) }))
+      .sort((a, b) => a.typeId - b.typeId || a.label.localeCompare(b.label, 'pt-BR'));
+  }, [pontos]);
   const pontosFiltrados = useMemo(() => {
     const busca = localizacaoAplicada.busca.trim().toLocaleLowerCase('pt-BR');
 
@@ -79,10 +116,29 @@ function App() {
           .join(' ')
           .toLocaleLowerCase('pt-BR')
           .includes(busca));
+      const correspondeAtributos = Object.entries(atributosAplicados).every(([key, selection]) => {
+        const [typeId, ...attributeNameParts] = key.split(':');
+        if (Number(typeId) !== ponto.tipo_id) return true;
+        const hasDiscreteSelection = selection.selectedValues.length > 0;
+        const minimum = selection.minimum === '' ? null : Number(selection.minimum);
+        const maximum = selection.maximum === '' ? null : Number(selection.maximum);
+        if (!hasDiscreteSelection && minimum === null && maximum === null) return true;
+        const attributeName = attributeNameParts.join(':');
+        const attribute = ponto.atributos?.find((item) => item.nome === attributeName);
+        if (!attribute || attribute.valor === null) return false;
+        if (attribute.tipo_valor === 'numero') {
+          if (typeof attribute.valor !== 'number') return false;
+          return (minimum === null || attribute.valor >= minimum)
+            && (maximum === null || attribute.valor <= maximum);
+        }
+        return hasDiscreteSelection
+          && selection.selectedValues.includes(attribute.valor as string | boolean);
+      });
 
       return tiposAplicados.includes(ponto.tipo_id)
         && situacoesAplicadas.includes(ponto.situacao_id)
-        && correspondeLocalizacao;
+        && correspondeLocalizacao
+        && correspondeAtributos;
     }).map((ponto) => {
       if (ponto.mobilidade !== 'movel') return ponto;
       const latitude = posicaoMovel === 'fixa'
@@ -93,7 +149,7 @@ function App() {
         : ponto.longitude_gps ?? ponto.longitude_fixa ?? ponto.longitude;
       return { ...ponto, latitude, longitude };
     });
-  }, [pontos, tiposAplicados, situacoesAplicadas, localizacaoAplicada, posicaoMovel]);
+  }, [pontos, tiposAplicados, situacoesAplicadas, localizacaoAplicada, atributosAplicados, posicaoMovel]);
   const pontosMapa = exibirApenasSelecionados
     ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
     : pontosFiltrados;
@@ -134,6 +190,8 @@ function App() {
     setTiposAplicados(tiposPadrao);
     setSituacoesSelecionadas(situacoesPadrao);
     setSituacoesAplicadas(situacoesPadrao);
+    setAtributosSelecionados({});
+    setAtributosAplicados({});
     setFiltrosLocalizacao(emptyLocationFilters);
     setLocalizacaoAplicada(emptyLocationFilters);
     setExibirApenasSelecionados(false);
@@ -222,6 +280,12 @@ function App() {
         types={{ options: equipmentTypes, selectedIds: tiposSelecionados, onChange: setTiposSelecionados }}
         situations={{ options: equipmentSituationOptions, selectedIds: situacoesSelecionadas, onChange: setSituacoesSelecionadas }}
         location={{ value: filtrosLocalizacao, options: opcoesLocalizacao, onChange: setFiltrosLocalizacao }}
+        attributes={{
+          options: opcoesAtributos,
+          visibleTypeIds: tiposSelecionados,
+          value: atributosSelecionados,
+          onChange: setAtributosSelecionados,
+        }}
         position={{ value: posicaoMovel, onChange: setPosicaoMovel }}
         period={{
           mode: modoData,
@@ -241,6 +305,7 @@ function App() {
         onApply={() => {
           setTiposAplicados(tiposSelecionados);
           setSituacoesAplicadas(situacoesSelecionadas);
+          setAtributosAplicados(atributosSelecionados);
           setLocalizacaoAplicada(filtrosLocalizacao);
           setDataHoraAplicada(modoData === 'historico' ? dataHoraSelecionada : null);
         }}

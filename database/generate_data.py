@@ -83,6 +83,57 @@ COMMIT;
     return "\n".join(parts)
 
 
+def equipment_attributes_migration_sql(attribute_definitions, attribute_values):
+    """Create an idempotent migration for equipment attributes on existing volumes."""
+    parts = ["""-- Idempotent catalog and demo values upgrade for persistent database volumes.
+START TRANSACTION;
+CREATE TEMPORARY TABLE migration_attribute_definitions (
+  id_tipo INT UNSIGNED NOT NULL,
+  nome VARCHAR(100) NOT NULL,
+  tipo_valor ENUM('texto','numero','booleano') NOT NULL,
+  unidade VARCHAR(30),
+  obrigatorio BOOLEAN NOT NULL,
+  PRIMARY KEY (id_tipo, nome)
+) ENGINE=InnoDB;
+""",
+        insert("migration_attribute_definitions", ["id_tipo", "nome", "tipo_valor", "unidade", "obrigatorio"], attribute_definitions)
+        .replace("INSERT INTO `migration_attribute_definitions`", "INSERT INTO migration_attribute_definitions"),
+        """INSERT INTO atributos_tipo (id_tipo, nome, tipo_valor, unidade, obrigatorio)
+SELECT id_tipo, nome, tipo_valor, unidade, obrigatorio
+FROM migration_attribute_definitions
+ON DUPLICATE KEY UPDATE tipo_valor=VALUES(tipo_valor), unidade=VALUES(unidade), obrigatorio=VALUES(obrigatorio);
+
+CREATE TEMPORARY TABLE migration_attribute_values (
+  id_equipamento INT UNSIGNED NOT NULL,
+  id_tipo INT UNSIGNED NOT NULL,
+  nome VARCHAR(100) NOT NULL,
+  valor_texto VARCHAR(255),
+  valor_numero DECIMAL(14,4),
+  valor_booleano BOOLEAN,
+  PRIMARY KEY (id_equipamento, id_tipo, nome)
+) ENGINE=InnoDB;
+""",
+        insert("migration_attribute_values", ["id_equipamento", "id_tipo", "nome", "valor_texto", "valor_numero", "valor_booleano"], attribute_values)
+        .replace("INSERT INTO `migration_attribute_values`", "INSERT INTO migration_attribute_values"),
+        """INSERT INTO valores_atributo (id_equipamento, id_atributo, valor_texto, valor_numero, valor_booleano)
+SELECT staged.id_equipamento, attribute.id_atributo,
+       staged.valor_texto, staged.valor_numero, staged.valor_booleano
+FROM migration_attribute_values AS staged
+JOIN equipamentos AS equipment
+  ON equipment.id_equipamento = staged.id_equipamento
+ AND equipment.id_tipo = staged.id_tipo
+JOIN atributos_tipo AS attribute
+  ON attribute.id_tipo = staged.id_tipo
+ AND attribute.nome = staged.nome
+ON DUPLICATE KEY UPDATE
+  valor_texto=VALUES(valor_texto),
+  valor_numero=VALUES(valor_numero),
+  valor_booleano=VALUES(valor_booleano);
+COMMIT;
+"""]
+    return "\n".join(parts)
+
+
 def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = False):
     rng = random.Random(seed)
     graph = load_graph(graph_path)
@@ -161,37 +212,96 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
                                NOW - timedelta(days=rng.randint(1, 1000)) if type_id not in mobile_ids and state != 6 else None))
     add("equipamentos", ["id_equipamento", "id_tipo", "id_orgao", "id_localizacao", "id_situacao", "numero_serie", "marca", "modelo", "cadastrado_em", "instalado_em"], equipment_rows)
 
-    attr_defs = [(1, "limite_velocidade", "numero", "km/h"), (1, "modalidade", "texto", None),
-                 (2, "limite_velocidade", "numero", "km/h"), (2, "modalidade", "texto", None),
-                 (3, "resolucao", "texto", None), (3, "visao_noturna", "booleano", None),
-                 (4, "largura_m", "numero", "m"), (5, "vagas_monitoradas", "numero", "vagas"),
-                 (6, "capacidade_ton", "numero", "t"), (7, "autonomia_km", "numero", "km"),
-                 (8, "cilindrada_cc", "numero", "cc"), (9, "tracao", "texto", None),
-                 (10, "tracao", "texto", None), (11, "tracao", "texto", None),
-                 (12, "categoria_servico", "texto", None), (12, "capacidade_passageiros", "numero", "pessoas"),
-                 (13, "cilindrada_cc", "numero", "cc"), (13, "capacete_disponivel", "booleano", None),
-                 (14, "capacidade_alunos", "numero", "pessoas"), (14, "acessibilidade", "booleano", None),
-                 (15, "leitura_placas", "booleano", None), (15, "autonomia_km", "numero", "km")]
-    add("atributos_tipo", ["id_atributo", "id_tipo", "nome", "tipo_valor", "unidade", "obrigatorio"], [(i + 1, *a, True) for i, a in enumerate(attr_defs)])
+    attr_defs = [
+        # Keep the original definitions first so IDs stay stable in fresh databases.
+        (1, "limite_velocidade", "numero", "km/h", False), (1, "modalidade", "texto", None, True),
+        (2, "limite_velocidade", "numero", "km/h", False), (2, "modalidade", "texto", None, True),
+        (3, "resolucao", "texto", None, True), (3, "visao_noturna", "booleano", None, True),
+        (4, "largura_m", "numero", "m", True), (5, "vagas_monitoradas", "numero", "vagas", True),
+        (6, "capacidade_ton", "numero", "t", True), (7, "autonomia_km", "numero", "km", True),
+        (8, "cilindrada_cc", "numero", "cc", True), (9, "tracao", "texto", None, True),
+        (10, "tracao", "texto", None, True), (11, "tracao", "texto", None, True),
+        (12, "categoria_servico", "texto", None, True), (12, "capacidade_passageiros", "numero", "pessoas", True),
+        (13, "cilindrada_cc", "numero", "cc", True), (13, "capacete_disponivel", "booleano", None, True),
+        (14, "capacidade_alunos", "numero", "pessoas", True), (14, "acessibilidade", "booleano", None, True),
+        (15, "leitura_placas", "booleano", None, True), (15, "autonomia_km", "numero", "km", True),
+        (1, "faixas_fiscalizadas", "numero", "faixas", True), (2, "faixas_fiscalizadas", "numero", "faixas", True),
+        (3, "tipo_imagem", "texto", None, True), (3, "ptz", "booleano", None, True),
+        (4, "altura_m", "numero", "m", True), (4, "controle_acesso", "texto", None, True),
+        (4, "duplo_sentido", "booleano", None, True),
+        (5, "aceita_pix", "booleano", None, True), (5, "aceita_cartao", "booleano", None, True),
+        (5, "aceita_dinheiro", "booleano", None, True), (5, "acessibilidade", "booleano", None, True),
+        (6, "eixos_maximo", "numero", "eixos", True), (6, "precisao_kg", "numero", "kg", True),
+        (7, "velocidade_max_kmh", "numero", "km/h", True), (7, "tipo_propulsao", "texto", None, True),
+        (7, "bloqueio_area_restrita", "booleano", None, True),
+        (8, "tipo_propulsao", "texto", None, True),
+        (9, "tipo_propulsao", "texto", None, True), (9, "radio_operacional", "booleano", None, True),
+        (9, "sirene_giroflex", "booleano", None, True),
+        (10, "tipo_propulsao", "texto", None, True), (10, "radio_operacional", "booleano", None, True),
+        (10, "sirene_giroflex", "booleano", None, True),
+        (11, "tipo_propulsao", "texto", None, True), (11, "radio_operacional", "booleano", None, True),
+        (11, "camera_embarcada", "booleano", None, True),
+        (12, "tipo_propulsao", "texto", None, True), (12, "acessibilidade", "booleano", None, True),
+        (12, "tracao", "texto", None, True),
+        (13, "tipo_propulsao", "texto", None, True), (13, "capacete_passageiro", "booleano", None, True),
+        (14, "tipo_propulsao", "texto", None, True), (14, "cintos_seguranca", "booleano", None, True),
+        (14, "acompanhante", "booleano", None, True), (14, "tracao", "texto", None, True),
+        (15, "quantidade_cameras", "numero", "unidades", True), (15, "resolucao", "texto", None, True),
+        (15, "visao_noturna", "booleano", None, True), (15, "tipo_propulsao", "texto", None, True),
+        (15, "tracao", "texto", None, True), (15, "radio_operacional", "booleano", None, True),
+    ]
+    add("atributos_tipo", ["id_atributo", "id_tipo", "nome", "tipo_valor", "unidade", "obrigatorio"],
+        [(i + 1, *a) for i, a in enumerate(attr_defs)])
     attr_by_type = {}
     for i, a in enumerate(attr_defs, 1):
         attr_by_type.setdefault(a[0], []).append(i)
     values = []
+    modalities = ["velocidade", "avan\u00e7o de sinal", "faixa exclusiva", "convers\u00e3o proibida", "retorno proibido"]
+    radar_modality = {}
+    for radar_type in (1, 2):
+        radar_ids = [equip_id for equip_id, type_id in equipment_type.items() if type_id == radar_type]
+        for index, equip_id in enumerate(radar_ids):
+            radar_modality[equip_id] = modalities[index % len(modalities)]
+    propulsion_by_type = {
+        7: ["el\u00e9trica"], 8: ["gasolina", "flex"], 9: ["flex", "diesel", "h\u00edbrida"],
+        10: ["flex", "diesel", "h\u00edbrida"], 11: ["flex", "diesel", "el\u00e9trica"],
+        12: ["flex", "gasolina", "h\u00edbrida", "el\u00e9trica"], 13: ["gasolina", "flex"],
+        14: ["diesel", "flex"], 15: ["el\u00e9trica", "h\u00edbrida"],
+    }
     for equip_id, type_id in equipment_type.items():
         for attr_id in attr_by_type.get(type_id, []):
             definition = attr_defs[attr_id - 1]
             name, kind = definition[1], definition[2]
-            if name == "limite_velocidade": value = (None, rng.choice([40, 50, 60, 80]), None)
-            elif name == "modalidade":
-                modalidade = rng.choice(["velocidade", "avanço de sinal", "faixa exclusiva"])
-                primeiro_radar = next(i for i, tipo in equipment_type.items() if tipo in (1, 2))
-                value = ("retorno proibido" if equip_id == primeiro_radar else modalidade, None, None)
-            elif name == "categoria_servico": value = (rng.choice(["convencional", "executivo", "acessÃ­vel"]), None, None)
-            elif name == "resolucao": value = (rng.choice(["1080p", "4K", "5MP"]), None, None)
-            elif kind == "booleano": value = (None, None, rng.choice([True, False]))
-            elif kind == "numero": value = (None, rng.randint(5, 120), None)
-            else: value = (rng.choice(["elétrica", "híbrida", "combustão"]), None, None)
-            values.append((equip_id, attr_id, *value))
+            if name == "modalidade": value = (radar_modality[equip_id], None, None)
+            elif name == "limite_velocidade":
+                value = (None, rng.choice([40, 50, 60, 80]) if radar_modality[equip_id] == "velocidade" else None, None)
+            elif name == "categoria_servico": value = (rng.choice(["convencional", "executivo", "acess\u00edvel"]), None, None)
+            elif name == "resolucao": value = (rng.choice(["1080p", "4 MP", "4K"]), None, None)
+            elif name == "tipo_imagem": value = (rng.choice(["colorida", "preto e branco"]), None, None)
+            elif name == "controle_acesso": value = (rng.choice(["leitor de placas", "tag RFID", "controle manual"]), None, None)
+            elif name == "tipo_propulsao": value = (rng.choice(propulsion_by_type[type_id]), None, None)
+            elif name == "tracao": value = (rng.choice(["4x2", "4x4"]) if type_id in (9, 10, 11, 15) else "4x2", None, None)
+            elif name == "quantidade_cameras": value = (None, rng.choice([2, 4, 6, 8]), None)
+            elif name == "faixas_fiscalizadas": value = (None, rng.choice([1, 2, 3, 4]), None)
+            elif name == "eixos_maximo": value = (None, rng.choice([2, 3, 4, 5, 6, 7, 9]), None)
+            elif name == "precisao_kg": value = (None, rng.choice([5, 10, 20, 50]), None)
+            elif name == "velocidade_max_kmh": value = (None, rng.choice([20, 25, 30, 35]), None)
+            elif name == "altura_m": value = (None, round(rng.uniform(2.5, 5.5), 1), None)
+            elif name in ("aceita_pix", "aceita_cartao", "aceita_dinheiro", "acessibilidade", "bloqueio_area_restrita",
+                          "ptz", "duplo_sentido", "radio_operacional", "sirene_giroflex", "camera_embarcada",
+                          "capacete_disponivel", "capacete_passageiro", "cintos_seguranca", "acompanhante", "visao_noturna",
+                          "leitura_placas"):
+                value = (None, None, rng.choice([True, False]))
+            elif name == "largura_m": value = (None, round(rng.uniform(2.5, 5.5), 1), None)
+            elif name == "vagas_monitoradas": value = (None, rng.randint(5, 120), None)
+            elif name == "capacidade_ton": value = (None, rng.choice([30, 40, 60, 80, 100]), None)
+            elif name == "autonomia_km": value = (None, rng.choice([60, 80, 100, 120, 160, 200]), None)
+            elif name == "cilindrada_cc": value = (None, rng.choice([125, 150, 160, 250, 300, 500]), None)
+            elif name == "capacidade_passageiros": value = (None, rng.choice([4, 5, 6, 7]), None)
+            elif name == "capacidade_alunos": value = (None, rng.choice([15, 20, 25, 30, 35, 40]), None)
+            else: raise ValueError(f"No seed generator for equipment attribute {name!r}")
+            if any(item is not None for item in value):
+                values.append((equip_id, attr_id, *value))
     add("valores_atributo", ["id_equipamento", "id_atributo", "valor_texto", "valor_numero", "valor_booleano"], values)
 
     histories = []
@@ -330,6 +440,18 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     migration_temp = migration_path.with_suffix(migration_path.suffix + ".tmp")
     migration_temp.write_text(migration_sql(active_trip_rows, active_position_rows), encoding="utf-8")
     migration_temp.replace(migration_path)
+    attribute_definitions = [(definition[0], definition[1], definition[2], definition[3], definition[4])
+                             for definition in attr_defs]
+    definition_by_id = {index: definition for index, definition in enumerate(attr_defs, 1)}
+    attribute_migration_values = []
+    for equip_id, attr_id, text_value, number_value, boolean_value in values:
+        definition = definition_by_id[attr_id]
+        attribute_migration_values.append((equip_id, definition[0], definition[1], text_value, number_value, boolean_value))
+    attributes_migration_path = out.with_name("migrate_equipment_attributes.sql")
+    attributes_migration_temp = attributes_migration_path.with_suffix(attributes_migration_path.suffix + ".tmp")
+    attributes_migration_temp.write_text(
+        equipment_attributes_migration_sql(attribute_definitions, attribute_migration_values), encoding="utf-8")
+    attributes_migration_temp.replace(attributes_migration_path)
     summary = {**counts, "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type), "viagens_em_andamento": active_trip_count, "posicoes_min_por_viagem": min_positions_per_trip, "seed": seed}
     LOG.info("Wrote %s", out)
     for key, value in summary.items():

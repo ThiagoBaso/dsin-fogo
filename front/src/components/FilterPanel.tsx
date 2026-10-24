@@ -1,5 +1,6 @@
 import type { FormEvent } from 'react';
-import { LocationFilters } from '../types';
+import { AttributeFilterOption, AttributeFilterState, LocationFilters } from '../types';
+import EquipmentAttributeFilters from './EquipmentAttributeFilters';
 
 type FilterOption = { id: number; label: string };
 
@@ -23,6 +24,12 @@ type FilterPanelProps = {
       ufs: string[];
     };
     onChange: (filters: LocationFilters) => void;
+  };
+  attributes: {
+    options: AttributeFilterOption[];
+    visibleTypeIds: number[];
+    value: AttributeFilterState;
+    onChange: (value: AttributeFilterState) => void;
   };
   position: {
     value: 'gps' | 'fixa';
@@ -90,6 +97,7 @@ export default function FilterPanel({
   types,
   situations,
   location,
+  attributes,
   position,
   period,
   display,
@@ -204,6 +212,12 @@ export default function FilterPanel({
                 />
               </label>
             </details>
+            <EquipmentAttributeFilters
+              options={attributes.options}
+              visibleTypeIds={attributes.visibleTypeIds}
+              value={attributes.value}
+              onChange={attributes.onChange}
+            />
             <details className="equipment-filter-accordion equipment-location-filters" aria-label="Posição de equipamentos móveis">
               <summary>Posição dos equipamentos móveis</summary>
               <label className="equipment-location-control">

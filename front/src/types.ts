@@ -8,6 +8,27 @@ export interface LocationFilters {
   busca: string;
 }
 
+export type AttributeFilterValue = string | boolean;
+
+export interface AttributeFilterOption {
+  key: string;
+  typeId: number;
+  typeLabel: string;
+  name: string;
+  label: string;
+  typeValue: 'texto' | 'numero' | 'booleano';
+  unit: string | null;
+  values: AttributeFilterValue[];
+}
+
+export interface AttributeFilterSelection {
+  selectedValues: AttributeFilterValue[];
+  minimum: string;
+  maximum: string;
+}
+
+export type AttributeFilterState = Record<string, AttributeFilterSelection>;
+
 export interface Ponto {
   id: number;
   nome: string;
@@ -30,6 +51,7 @@ export interface Ponto {
   uf: string | null;
   cep: string | null;
   status: 'ativo' | 'inativo';
+  atributos?: AtributoEquipamento[];
 }
 
 export interface RotaPosicao {

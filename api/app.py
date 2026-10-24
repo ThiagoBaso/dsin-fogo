@@ -52,6 +52,52 @@ def fetch_all(query: str, params: tuple = ()):
         raise HTTPException(status_code=503, detail="Banco de dados indisponível") from exc
 
 
+def attach_equipment_attributes(equipment_rows: list[dict]):
+    if not equipment_rows:
+        return equipment_rows
+
+    equipment_ids = [row["id"] for row in equipment_rows]
+    placeholders = ",".join(["%s"] * len(equipment_ids))
+    attributes = fetch_all(
+        f"""
+        SELECT v.id_equipamento, a.id_atributo AS id, a.nome, a.tipo_valor, a.unidade,
+               v.valor_texto, CAST(v.valor_numero AS DOUBLE) AS valor_numero, v.valor_booleano
+        FROM valores_atributo v
+        JOIN atributos_tipo a ON a.id_atributo = v.id_atributo
+        WHERE v.id_equipamento IN ({placeholders})
+        ORDER BY v.id_equipamento, a.id_atributo
+        """,
+        tuple(equipment_ids),
+    )
+    by_equipment: dict[int, list[dict]] = {equipment_id: [] for equipment_id in equipment_ids}
+    for attribute in attributes:
+        value_key = {"texto": "valor_texto", "numero": "valor_numero", "booleano": "valor_booleano"}[attribute["tipo_valor"]]
+        value = attribute[value_key]
+        if attribute["tipo_valor"] == "booleano" and value is not None:
+            value = bool(value)
+        by_equipment[attribute["id_equipamento"]].append({
+            "id": attribute["id"],
+            "nome": attribute["nome"],
+            "tipo_valor": attribute["tipo_valor"],
+            "unidade": attribute["unidade"],
+            "valor": value,
+        })
+
+    for equipment in equipment_rows:
+        equipment["atributos"] = applicable_equipment_attributes(
+            equipment["tipo_id"], by_equipment[equipment["id"]])
+    return equipment_rows
+
+
+def applicable_equipment_attributes(equipment_type_id: int, attributes: list[dict]):
+    if equipment_type_id not in (1, 2):
+        return attributes
+    modality = next((attribute["valor"] for attribute in attributes if attribute["nome"] == "modalidade"), None)
+    if modality == "velocidade":
+        return attributes
+    return [attribute for attribute in attributes if attribute["nome"] != "limite_velocidade"]
+
+
 @app.get("/api/health")
 def health():
     rows = fetch_all("SELECT 1 AS ok")
@@ -61,7 +107,7 @@ def health():
 @app.get("/api/equipamentos")
 def list_equipamentos(em: datetime | None = None):
     if em is not None:
-        return fetch_all(
+        rows = fetch_all(
             """
             SELECT e.id_equipamento AS id,
                    CONCAT(t.nome, ' ', e.numero_serie) AS nome,
@@ -104,8 +150,9 @@ def list_equipamentos(em: datetime | None = None):
             """,
             (em, em, em, em),
         )
+        return attach_equipment_attributes(rows)
 
-    return fetch_all(
+    rows = fetch_all(
         """
         SELECT e.id_equipamento AS id,
                CONCAT(t.nome, ' ', e.numero_serie) AS nome,
@@ -139,6 +186,7 @@ def list_equipamentos(em: datetime | None = None):
         ORDER BY e.id_equipamento
         """
     )
+    return attach_equipment_attributes(rows)
 
 
 @app.get("/api/equipamentos/{equipamento_id}")
@@ -236,6 +284,8 @@ def get_equipamento(equipamento_id: int, em: datetime | None = None):
             "id": atributo["id"], "nome": atributo["nome"],
             "tipo_valor": tipo, "unidade": atributo["unidade"], "valor": valor,
         })
+    equipamento["atributos"] = applicable_equipment_attributes(
+        equipamento["tipo_id"], equipamento["atributos"])
     return equipamento
 
 

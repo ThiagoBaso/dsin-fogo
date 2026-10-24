@@ -6,7 +6,7 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 
 - `DER_FOGO.dbml`: modelo logico.
 - `schema.sql`: schema MySQL 8.0 / InnoDB / utf8mb4.
-- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql` and `migrate_equipment_situations.sql`: non-destructive upgrades for an existing Compose database volume.
+- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql` and `migrate_equipment_attributes.sql`: idempotent upgrades for an existing Compose database volume.
 - `generate_data.py`: gera a massa SQL de demonstracao.
 - `generate_neighborhood_boundaries.py`: gera o GeoJSON de setores demonstrativos usando quarteiroes delimitados por ruas do OpenStreetMap.
 - `generate_routes.py`: cria e interpola rotas pela malha viaria OpenStreetMap de Marilia.
@@ -17,6 +17,8 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 O seed preserva os 500 equipamentos originais e inclui oito unidades de cada um dos quatro novos tipos moveis (532 equipamentos no total, 92 moveis). Cada novo cadastro tem localizacao distinta, atributos especificos, historico e ao menos tres ocorrencias e quatro viagens com posicoes GPS. O gerador cria tres viagens concluidas por equipamento movel e uma ativa quando ele esta a mais de 100 m da base. As rotas sao demonstrativas e usam a malha viaria OSM.
 
 A massa tambem inclui oito equipamentos ainda nao instalados e oito com mau funcionamento, com historico de situacao coerente.
+
+O catalogo de atributos especificos cobre modalidade e faixas de radares; resolucao, tipo de imagem (colorida ou preto e branco), visao noturna e PTZ de cameras; dimensoes e controle de acesso de cancelas; meios de pagamento e acessibilidade de totens; capacidade por eixos e precisao de balancas; autonomia, velocidade e propulsao de patinetes; cilindrada, capacetes e equipamentos operacionais de motos e viaturas; e caracteristicas de servico, seguranca, acessibilidade e propulsao de transporte de passageiros. Radares fixos e moveis incluem as modalidades velocidade, avanco de sinal, faixa exclusiva, conversao proibida e retorno proibido. Os mesmos atributos sao usados na aba de filtros; textos e booleanos usam selecao por valores, e atributos numericos aceitam intervalo minimo e maximo.
 
 As localizacoes de demonstracao recebem CEPs e logradouros ficticios, identificados como demonstrativos. O servico `database-migrate` preenche esses campos quando estiverem vazios em volumes ja existentes.
 
@@ -38,7 +40,7 @@ A primeira geracao requer acesso ao OpenStreetMap/Overpass para obter a malha, q
 
 O GeoJSON dos setores e gerado a partir dessa mesma malha viaria: quarteiroes fechados pelas ruas sao agrupados em 40 setores sinteticos. As divisorias internas seguem vias; o limite externo e um fecho aproximado. Os setores continuam ficticios e nao devem ser tratados como limites oficiais de bairros.
 
-O Docker Compose monta `schema.sql` e `seed.sql` como scripts de inicializacao do MySQL. O MySQL executa esses scripts somente quando cria um volume vazio. Para um volume existente, o servico `database-migrate` aplica as mudancas de viagens e do catalogo de equipamentos de forma idempotente, preservando os outros dados. A API aguarda as migracoes concluirem. Nao remova `fogo_mysql_data`, pois isso apagaria os dados.
+O Docker Compose monta `schema.sql` e `seed.sql` como scripts de inicializacao do MySQL. O MySQL executa esses scripts somente quando cria um volume vazio. Para um volume existente, o servico `database-migrate` aplica as mudancas de viagens, do catalogo, dos enderecos, das situacoes e dos atributos de equipamento de forma idempotente. A migracao de atributos inclui o catalogo estendido e valores sinteticos coerentes com o seed, sem apagar equipamentos. A API aguarda as migracoes concluirem. Nao remova `fogo_mysql_data`, pois isso apagaria os dados.
 
 Para validar o seed offline, conferir as viagens ativas e verificar os limites geograficos, execute `py database\validate_data.py --seed-sql database\seed.sql`. Para validar uma base importada, configure `MYSQL_*` e execute `py database\validate_data.py`.
 

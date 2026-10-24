@@ -124,6 +124,41 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
             attrs_per_equipment[value["id_equipamento"]] += 1
     check("atributos especificos em todos os novos tipos", all(attrs_per_equipment[eid] >= 2 for eid in service_ids),
           f"{sum(attrs_per_equipment[eid] >= 2 for eid in service_ids)}/{len(service_ids)} equipamentos completos")
+    attribute_definitions = {row["id_atributo"]: row for row in tables.get("atributos_tipo", [])}
+    values_by_equipment = defaultdict(set)
+    values_by_type_and_name = defaultdict(set)
+    value_shape_ok = True
+    for value in tables.get("valores_atributo", []):
+        definition = attribute_definitions.get(value["id_atributo"])
+        if definition is None:
+            value_shape_ok = False
+            continue
+        values_by_equipment[value["id_equipamento"]].add(value["id_atributo"])
+        text_value, number_value, boolean_value = value["valor_texto"], value["valor_numero"], value["valor_booleano"]
+        value_shape_ok &= sum(item is not None for item in (text_value, number_value, boolean_value)) == 1
+        if text_value is not None:
+            value_shape_ok &= definition["tipo_valor"] == "texto"
+            values_by_type_and_name[(definition["id_tipo"], definition["nome"])].add(text_value)
+        elif number_value is not None:
+            value_shape_ok &= definition["tipo_valor"] == "numero"
+        elif boolean_value is not None:
+            value_shape_ok &= definition["tipo_valor"] == "booleano"
+    required_attributes = defaultdict(set)
+    for definition in attribute_definitions.values():
+        if definition["obrigatorio"]:
+            required_attributes[definition["id_tipo"]].add(definition["id_atributo"])
+    incomplete_required = [equipment_id for equipment_id, equipment in eq.items()
+                           if not required_attributes[equipment["id_tipo"]].issubset(values_by_equipment[equipment_id])]
+    check("atributos obrigatorios completos e valores no tipo correto", value_shape_ok and not incomplete_required,
+          f"{len(incomplete_required)} equipamentos incompletos; {len(tables.get('valores_atributo', []))} valores conferidos")
+    radar_modalities = {"velocidade", "avanço de sinal", "faixa exclusiva", "conversão proibida", "retorno proibido"}
+    modality_coverage_ok = all(radar_modalities.issubset(values_by_type_and_name[(type_id, "modalidade")])
+                              for type_id in (1, 2))
+    check("cinco modalidades de fiscalização em radares fixos e móveis", modality_coverage_ok,
+          f"fixo={len(values_by_type_and_name[(1, 'modalidade')])}; móvel={len(values_by_type_and_name[(2, 'modalidade')])}")
+    image_types = values_by_type_and_name[(3, "tipo_imagem")]
+    check("câmeras coloridas e preto e branco representadas", {"colorida", "preto e branco"}.issubset(image_types),
+          ", ".join(sorted(image_types)))
     occurrences_per_equipment = defaultdict(int)
     for occurrence in tables.get("ocorrencias", []):
         if occurrence["id_equipamento"] in service_ids:
@@ -187,6 +222,45 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     mismatch = [(r["id_equipamento"], r["id_atributo"]) for r in tables["valores_atributo"]
                 if eq[r["id_equipamento"]]["id_tipo"] != next(a["id_tipo"] for a in tables["atributos_tipo"] if a["id_atributo"] == r["id_atributo"])]
     check("atributos compatíveis com tipo", not mismatch, f"{len(mismatch)} incompatíveis")
+    migration_path = seed_path.with_name("migrate_equipment_attributes.sql")
+    migration_definitions = {}
+    migration_values = {}
+    if migration_path.exists():
+        migration_sql = migration_path.read_text(encoding="utf-8")
+        migration_pattern = re.compile(r"INSERT INTO `?([^`\s(]+)`? \(([^)]*)\) VALUES\s*(.*);", re.S)
+        for statement in _statements(migration_sql):
+            match = migration_pattern.fullmatch(statement.strip())
+            if not match:
+                continue
+            table = match.group(1)
+            if table not in ("migration_attribute_definitions", "migration_attribute_values"):
+                continue
+            columns = re.findall(r"`([^`]+)`", match.group(2))
+            for row in _parse_value_list(match.group(3)):
+                parsed = dict(zip(columns, row))
+                if table == "migration_attribute_definitions":
+                    migration_definitions[(parsed["id_tipo"], parsed["nome"])] = (
+                        parsed["tipo_valor"], parsed["unidade"], parsed["obrigatorio"])
+                else:
+                    key = (parsed["id_equipamento"], parsed["id_tipo"], parsed["nome"])
+                    migration_values[key] = (parsed["valor_texto"], parsed["valor_numero"], parsed["valor_booleano"])
+    seed_definitions = {
+        (definition["id_tipo"], definition["nome"]): (
+            definition["tipo_valor"], definition["unidade"], definition["obrigatorio"])
+        for definition in attribute_definitions.values()
+    }
+    seed_values_by_name = {}
+    for value in tables.get("valores_atributo", []):
+        definition = attribute_definitions.get(value["id_atributo"])
+        if definition is not None:
+            key = (value["id_equipamento"], definition["id_tipo"], definition["nome"])
+            seed_values_by_name[key] = (value["valor_texto"], value["valor_numero"], value["valor_booleano"])
+    check("catálogo de atributos da migração igual ao seed",
+          migration_path.exists() and migration_definitions == seed_definitions,
+          f"{len(migration_definitions)} definições na migração; {len(seed_definitions)} no seed")
+    check("valores da migração iguais ao seed",
+          migration_path.exists() and migration_values == seed_values_by_name,
+          f"{len(migration_values)} valores na migração; {len(seed_values_by_name)} no seed")
 
     chronology_ok = True
     for trip_id, rows in positions_by_trip.items():
@@ -270,6 +344,9 @@ def main() -> int:
     check("posições fora de ordem cronológica", "SELECT COUNT(*) FROM (SELECT registrado_em, LAG(registrado_em) OVER (PARTITION BY id_viagem ORDER BY id_posicao) AS anterior FROM posicoes_equipamento WHERE id_viagem IS NOT NULL) p WHERE anterior > registrado_em", lambda n: n == 0, "0")
     check("referências órfãs", "SELECT SUM(n) FROM (SELECT COUNT(*) n FROM equipamentos e LEFT JOIN tipos_equipamento t USING(id_tipo) WHERE t.id_tipo IS NULL UNION ALL SELECT COUNT(*) FROM equipamentos e LEFT JOIN orgaos o USING(id_orgao) WHERE o.id_orgao IS NULL UNION ALL SELECT COUNT(*) FROM equipamentos e LEFT JOIN localizacoes l USING(id_localizacao) WHERE e.id_localizacao IS NOT NULL AND l.id_localizacao IS NULL UNION ALL SELECT COUNT(*) FROM equipamentos e LEFT JOIN situacoes_equipamento s USING(id_situacao) WHERE s.id_situacao IS NULL UNION ALL SELECT COUNT(*) FROM posicoes_equipamento p LEFT JOIN viagens v USING(id_viagem) WHERE p.id_viagem IS NOT NULL AND v.id_viagem IS NULL UNION ALL SELECT COUNT(*) FROM viagens v LEFT JOIN equipamentos e USING(id_equipamento) WHERE e.id_equipamento IS NULL) refs", lambda n: (n or 0) == 0, "0")
     check("atributos incompatíveis com tipo de equipamento", "SELECT COUNT(*) FROM valores_atributo v JOIN equipamentos e USING(id_equipamento) JOIN atributos_tipo a USING(id_atributo) WHERE e.id_tipo <> a.id_tipo", lambda n: n == 0, "0")
+    check("atributos obrigatórios sem valor", "SELECT COUNT(*) FROM equipamentos e JOIN atributos_tipo a ON a.id_tipo=e.id_tipo AND a.obrigatorio=1 LEFT JOIN valores_atributo v ON v.id_equipamento=e.id_equipamento AND v.id_atributo=a.id_atributo WHERE v.id_equipamento IS NULL", lambda n: n == 0, "0")
+    check("modalidades de radares cobrem retorno proibido", "SELECT COUNT(DISTINCT v.valor_texto) FROM valores_atributo v JOIN atributos_tipo a USING(id_atributo) WHERE a.id_tipo IN (1,2) AND a.nome='modalidade'", lambda n: n >= 5, ">= 5")
+    check("câmeras com os dois tipos de imagem", "SELECT COUNT(DISTINCT v.valor_texto) FROM valores_atributo v JOIN atributos_tipo a USING(id_atributo) WHERE a.id_tipo=3 AND a.nome='tipo_imagem'", lambda n: n >= 2, ">= 2")
 
     for label, ok, actual, expected in checks:
         print(f"{'PASS' if ok else 'FAIL'} {label}: {actual} (esperado {expected})")
