@@ -19,13 +19,18 @@ beforeEach(() => {
 });
 
 test('renders the filter panel and view switch', async () => {
-  render(<App />);
+  const { container } = render(<App />);
 
   expect(screen.getByRole('heading', { name: 'Filtros' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Atualizar' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Mapa' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Lista' })).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+  const mapCounts = container.querySelectorAll('.map-selection-summary .item-list-selection-count');
+  expect(mapCounts).toHaveLength(2);
+  expect(mapCounts[0]).toHaveAttribute('aria-label', '0 itens selecionados de 0 exibidos');
+  expect(mapCounts[1]).toHaveAttribute('aria-label', '0 agentes selecionados de 0 exibidos');
 });
 
 test('preserves each list scroll position while switching views', async () => {

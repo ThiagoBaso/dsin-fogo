@@ -16,12 +16,22 @@ export default function AgentList({
   visible: boolean;
 }) {
   const visibleAgents = agents;
+  const quantidadeSelecionada = visibleAgents.filter((agent) => selectedAgentIds.includes(agent.id)).length;
+  const agentesSelecionados = quantidadeSelecionada === 1 ? '1 agente selecionado' : `${quantidadeSelecionada} agentes selecionados`;
+  const agentesExibidos = visibleAgents.length === 1 ? '1 agente exibido' : `${visibleAgents.length} agentes exibidos`;
+  const rotuloContagem = `${agentesSelecionados} de ${agentesExibidos}`;
 
   return (
     <section className="item-list agent-list" aria-label="Lista de agentes" hidden={!visible}>
       <div className="item-list-header">
-        <h2>Agentes</h2>
-        <span className="agent-list-count" aria-live="polite">{visibleAgents.length}</span>
+        <div className="item-list-title">
+          <h2>Agentes</h2>
+          <span className="item-list-selection-count" aria-label={rotuloContagem} title={rotuloContagem} aria-live="polite">
+            <strong>{quantidadeSelecionada}</strong>
+            <span aria-hidden="true">/</span>
+            <span>{visibleAgents.length}</span>
+          </span>
+        </div>
       </div>
       <div className="agent-list-columns" aria-hidden="true">
         <span />

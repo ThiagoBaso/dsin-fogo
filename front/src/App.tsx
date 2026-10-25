@@ -424,6 +424,9 @@ function App() {
     return () => controller.abort();
   }, [selecionadosIds, pontos, dataHoraAplicada]);
 
+  const quantidadeEquipamentosSelecionadosNoMapa = pontosMapa.filter((ponto) => selecionadosIds.includes(ponto.id)).length;
+  const quantidadeAgentesSelecionadosNoMapa = agentesMapa.filter((agente) => agentesSelecionadosIds.includes(agente.id)).length;
+
   return (
     <div className={painelExpandido ? 'App' : 'App filters-collapsed'}>
       <FilterPanel
@@ -505,6 +508,32 @@ function App() {
             exibirContornoBairros={exibirContornoBairros}
             temaEscuro={tema === 'dark'}
           />
+          <div className="map-selection-summary" aria-label="Contagem de selecao no mapa" aria-live="polite">
+            <div className="map-selection-count-row">
+              <span>Itens</span>
+              <span
+                className="item-list-selection-count"
+                aria-label={`${quantidadeEquipamentosSelecionadosNoMapa} itens selecionados de ${pontosMapa.length} exibidos`}
+                title={`${quantidadeEquipamentosSelecionadosNoMapa} itens selecionados de ${pontosMapa.length} exibidos`}
+              >
+                <strong>{quantidadeEquipamentosSelecionadosNoMapa}</strong>
+                <span aria-hidden="true">/</span>
+                <span>{pontosMapa.length}</span>
+              </span>
+            </div>
+            <div className="map-selection-count-row">
+              <span>Agentes</span>
+              <span
+                className="item-list-selection-count"
+                aria-label={`${quantidadeAgentesSelecionadosNoMapa} agentes selecionados de ${agentesMapa.length} exibidos`}
+                title={`${quantidadeAgentesSelecionadosNoMapa} agentes selecionados de ${agentesMapa.length} exibidos`}
+              >
+                <strong>{quantidadeAgentesSelecionadosNoMapa}</strong>
+                <span aria-hidden="true">/</span>
+                <span>{agentesMapa.length}</span>
+              </span>
+            </div>
+          </div>
         </div>
         <ItemList
           visible={abaAtiva === 'lista'}

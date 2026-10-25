@@ -21,11 +21,22 @@ function ItemList({
   const pontosVisiveis = pontos;
   const todosSelecionados = pontosVisiveis.length > 0
     && pontosVisiveis.every((ponto) => selecionadosIds.includes(ponto.id));
+  const quantidadeSelecionada = pontosVisiveis.filter((ponto) => selecionadosIds.includes(ponto.id)).length;
+  const itensSelecionados = quantidadeSelecionada === 1 ? '1 item selecionado' : `${quantidadeSelecionada} itens selecionados`;
+  const itensExibidos = pontosVisiveis.length === 1 ? '1 item exibido' : `${pontosVisiveis.length} itens exibidos`;
+  const rotuloContagem = `${itensSelecionados} de ${itensExibidos}`;
 
   return (
     <section className="item-list equipment-list" aria-label="Lista de itens" hidden={!visible}>
       <div className="item-list-header">
-        <h2>Itens</h2>
+        <div className="item-list-title">
+          <h2>Itens</h2>
+          <span className="item-list-selection-count" aria-label={rotuloContagem} title={rotuloContagem} aria-live="polite">
+            <strong>{quantidadeSelecionada}</strong>
+            <span aria-hidden="true">/</span>
+            <span>{pontosVisiveis.length}</span>
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => onAlternarTodos(!todosSelecionados, pontosVisiveis.map((ponto) => ponto.id))}

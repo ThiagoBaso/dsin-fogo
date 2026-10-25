@@ -38,10 +38,14 @@ test('checks an agent independently from opening its details', () => {
   const { container } = render(<ControlledAgentList />);
   const checkbox = screen.getByRole('checkbox', { name: 'Selecionar agente DEMO-AG-0017' });
   const row = container.querySelector('li');
+  const selectionCount = container.querySelector('.item-list-selection-count');
+
+  expect(selectionCount).toHaveAttribute('aria-label', '0 agentes selecionados de 1 agente exibido');
 
   fireEvent.click(checkbox);
   expect(checkbox).toBeChecked();
   expect(row).toHaveClass('selected');
+  expect(selectionCount).toHaveAttribute('aria-label', '1 agente selecionado de 1 agente exibido');
   expect(onSelect).not.toHaveBeenCalled();
 
   fireEvent.click(screen.getByRole('button', { name: /DEMO-AG-0017/ }));
