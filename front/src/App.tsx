@@ -84,13 +84,14 @@ function App() {
   const [detalhesId, setDetalhesId] = useState<number | null>(null);
   const [detalhesAgenteId, setDetalhesAgenteId] = useState<number | null>(null);
   const [filtrosAgentes, setFiltrosAgentes] = useState<AgentFilterState>({
-    showOnMap: false,
+    showOnMap: true,
     organizationIds: null,
     roles: null,
     registrationStatuses: null,
     shiftStatuses: null,
   });
   const [exibirApenasSelecionados, setExibirApenasSelecionados] = useState(false);
+  const [exibirItensMapa, setExibirItensMapa] = useState(true);
   const [permitirMultisselecao, setPermitirMultisselecao] = useState(false);
   const [filtrosLocalizacao, setFiltrosLocalizacao] = useState<LocationFilters>(emptyLocationFilters);
   const [localizacaoAplicada, setLocalizacaoAplicada] = useState<LocationFilters>(emptyLocationFilters);
@@ -261,7 +262,7 @@ function App() {
         .includes(termo))
       : agentesFiltrados;
   }, [agentesFiltrados, buscaAgentes]);
-  const agentesMapa = filtrosAgentes.showOnMap ? agentesFiltrados : [];
+  const agentesMapa = agentesFiltrados;
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
   function visualizarEquipamento(ponto: Ponto) {
@@ -324,7 +325,7 @@ function App() {
     setAtributosSelecionados({});
     setAtributosAplicados({});
     setFiltrosAgentes({
-      showOnMap: false,
+      showOnMap: true,
       organizationIds: null,
       roles: null,
       registrationStatuses: null,
@@ -507,7 +508,7 @@ function App() {
         {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
         <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
           <Map
-            pontos={pontosMapa}
+            pontos={exibirItensMapa ? pontosMapa : []}
             rotas={rotas}
             ativo={abaAtiva === 'mapa'}
             onSelecionar={selecionarNoMapa}
@@ -522,7 +523,16 @@ function App() {
           />
           <div className="map-selection-summary" aria-label="Contagem de selecao no mapa" aria-live="polite">
             <div className="map-selection-count-row">
-              <span>Itens</span>
+              <label className="map-selection-visibility">
+                <input
+                  type="checkbox"
+                  checked={exibirItensMapa}
+                  onChange={(event) => setExibirItensMapa(event.target.checked)}
+                  aria-label="Exibir itens no mapa"
+                  title="Exibir itens no mapa"
+                />
+                <span>Itens</span>
+              </label>
               <span
                 className="item-list-selection-count"
                 aria-label={`${quantidadeEquipamentosSelecionadosNoMapa} itens selecionados de ${pontosMapa.length} exibidos`}
@@ -534,7 +544,16 @@ function App() {
               </span>
             </div>
             <div className="map-selection-count-row">
-              <span>Agentes</span>
+              <label className="map-selection-visibility">
+                <input
+                  type="checkbox"
+                  checked={filtrosAgentes.showOnMap}
+                  onChange={(event) => setFiltrosAgentes((atual) => ({ ...atual, showOnMap: event.target.checked }))}
+                  aria-label="Exibir agentes no mapa"
+                  title="Exibir agentes no mapa"
+                />
+                <span>Agentes</span>
+              </label>
               <span
                 className="item-list-selection-count"
                 aria-label={`${quantidadeAgentesSelecionadosNoMapa} agentes selecionados de ${agentesMapa.length} exibidos`}
