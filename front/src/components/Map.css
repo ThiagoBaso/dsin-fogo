@@ -16,6 +16,9 @@
   color: var(--dsin-ink);
   font-size: 12px;
 }
+@media (max-width: 600px) {
+  .map-heat-control { max-height: min(54%, 360px); overflow-y: auto; }
+}
 .map-heat-control > strong { font-size: 12px; }
 .map-heat-option {
   display: flex;
@@ -32,6 +35,13 @@
   accent-color: var(--dsin-yellow);
 }
 .map-heat-option input:focus-visible { outline: 3px solid var(--dsin-focus); outline-offset: 2px; }
+.map-heat-mode { display: grid; gap: 4px; color: var(--dsin-text); }
+.map-heat-mode select {
+  width: 100%; min-height: 32px; box-sizing: border-box; padding: 5px 7px;
+  border: 1px solid var(--dsin-border-strong); border-radius: 6px;
+  background: var(--dsin-surface); color: var(--dsin-ink); font-size: 11px;
+}
+.map-heat-mode select:focus-visible { outline: 3px solid var(--dsin-focus); outline-offset: 2px; }
 .map-heat-description { margin: 0; color: var(--dsin-muted); font-size: 10px; line-height: 1.35; }
 .map-heat-legend { display: grid; gap: 3px; color: var(--dsin-muted); font-size: 10px; }
 .map-heat-legend-scale {
@@ -39,15 +49,15 @@
   border-radius: 999px;
 }
 .map-heat-legend > div { display: flex; justify-content: space-between; }
-.map-coverage-active .equipment-marker,
-.map-coverage-active .agent-marker,
-.map-coverage-active .occurrence-marker { opacity: .45; }
-.map-coverage-active .equipment-marker.is-selected,
-.map-coverage-active .agent-marker.is-selected,
-.map-coverage-active .occurrence-marker.is-selected,
-.map-coverage-active .equipment-div-icon:is(:hover, :focus) .equipment-marker,
-.map-coverage-active .agent-div-icon:is(:hover, :focus) .agent-marker,
-.map-coverage-active .occurrence-div-icon:is(:hover, :focus) .occurrence-marker { opacity: 1; }
+.map-heat-active .equipment-marker,
+.map-heat-active .agent-marker,
+.map-heat-active .occurrence-marker { opacity: .45; }
+.map-heat-active .equipment-marker.is-selected,
+.map-heat-active .agent-marker.is-selected,
+.map-heat-active .occurrence-marker.is-selected,
+.map-heat-active .equipment-div-icon:is(:hover, :focus) .equipment-marker,
+.map-heat-active .agent-div-icon:is(:hover, :focus) .agent-marker,
+.map-heat-active .occurrence-div-icon:is(:hover, :focus) .occurrence-marker { opacity: 1; }
 .leaflet-tile-pane.map-theme-dark {
   filter: invert(.88) hue-rotate(180deg) brightness(.84) contrast(.9) saturate(.62);
 }

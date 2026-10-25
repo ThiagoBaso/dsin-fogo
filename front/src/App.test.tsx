@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from './App';
 import Map from './components/Map';
-import type { Agente, Ponto } from './types';
+import type { Agente, OcorrenciaMapa, Ponto } from './types';
 
 jest.mock('./components/Map', () => ({
   __esModule: true,
@@ -77,6 +77,54 @@ test('includes agents in coverage only through filters, while hiding markers pre
   fireEvent.click(filter);
   expect(mapProps().coverageSources).toHaveLength(1);
   expect(mapProps().agents).toHaveLength(0);
+});
+
+test('renders occurrence heat separately and keeps filtered points when occurrence markers are hidden', async () => {
+  const occurrences: OcorrenciaMapa[] = [
+    {
+      id: 11, tipo: 'Acidente', gravidade: 'critica', status: 'aberta', descricao: null,
+      ocorrida_em: '2026-10-25T10:00:00', logradouro: null, bairro: 'Centro', cidade: 'Marília', uf: 'SP',
+      latitude: -22.217, longitude: -49.95, orgao_nome: 'SMU', equipamento_nome: null,
+    },
+    {
+      id: 12, tipo: 'Incêndio', gravidade: 'media', status: 'em_atendimento', descricao: null,
+      ocorrida_em: '2026-10-25T10:10:00', logradouro: null, bairro: 'Centro', cidade: 'Marília', uf: 'SP',
+      latitude: -22.218, longitude: -49.951, orgao_nome: 'SMU', equipamento_nome: null,
+    },
+  ];
+  (fetch as jest.Mock).mockImplementation((input: string) => Promise.resolve({
+    ok: true,
+    json: async () => String(input).includes('/api/ocorrencias') ? occurrences : [],
+  }));
+  const mapProps = () => (Map as jest.Mock).mock.calls.slice(-1)[0][0];
+  const { container } = render(<App />);
+
+  const occurrenceFilters = container.querySelector('.equipment-occurrence-filters') as HTMLElement;
+  fireEvent.click(within(occurrenceFilters).getByText('Ocorrências'));
+  await waitFor(() => expect(mapProps().occurrenceHeatSources).toHaveLength(2));
+  expect(mapProps().occurrences).toEqual([]);
+  expect(mapProps().occurrenceHeatEnabled).toBe(false);
+
+  fireEvent.click(screen.getByLabelText('Aplicar mapa de calor de ocorrências'));
+  expect(mapProps().coverageHeatEnabled).toBe(false);
+  expect(mapProps().occurrenceHeatEnabled).toBe(true);
+  expect(mapProps().occurrenceHeatMode).toBe('quantidade');
+  expect(mapProps().occurrenceHeatSources.map((source: { severityWeight: number }) => source.severityWeight)).toEqual([4, 2]);
+
+  fireEvent.click(within(occurrenceFilters).getByLabelText('Exibir ocorrências no mapa'));
+  await waitFor(() => expect(mapProps().occurrences).toEqual(occurrences));
+
+  fireEvent.change(screen.getByLabelText('Visualizar mapa de calor de ocorrências por'), {
+    target: { value: 'gravidade' },
+  });
+  expect(mapProps().occurrenceHeatMode).toBe('gravidade');
+  expect(mapProps().occurrenceHeatSources.map((source: { severityWeight: number }) => source.severityWeight)).toEqual([4, 2]);
+
+  const visibility = within(container.querySelector('.map-selection-summary') as HTMLElement);
+  fireEvent.click(visibility.getByLabelText('Exibir marcadores de ocorrências no mapa'));
+  expect(mapProps().showOccurrences).toBe(false);
+  expect(mapProps().occurrenceHeatEnabled).toBe(true);
+  expect(mapProps().occurrenceHeatSources).toHaveLength(2);
 });
 
 test('clicking a selected vehicle marker deselects it and removes its route', async () => {

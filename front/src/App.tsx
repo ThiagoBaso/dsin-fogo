@@ -9,6 +9,9 @@ import EquipmentDetails from './components/EquipmentDetails';
 import OccurrenceDetails from './components/OccurrenceDetails';
 import FilterPanel from './components/FilterPanel';
 import {
+  collectOccurrenceHeatSources, occurrenceSeverityGradient, OccurrenceHeatMode,
+} from './components/map/occurrenceHeat';
+import {
   Aba,
   Agente,
   AgentFilterState,
@@ -118,6 +121,8 @@ function App() {
   const [exibirItensMapa, setExibirItensMapa] = useState(true);
   const [exibirAgentesMapa, setExibirAgentesMapa] = useState(true);
   const [mapaCalorCobertura, setMapaCalorCobertura] = useState(false);
+  const [mapaCalorOcorrencias, setMapaCalorOcorrencias] = useState(false);
+  const [modoCalorOcorrencias, setModoCalorOcorrencias] = useState<OccurrenceHeatMode>('quantidade');
   const [incluirOcorrenciasMapa, setIncluirOcorrenciasMapa] = useState(false);
   const [exibirMarcadoresOcorrencias, setExibirMarcadoresOcorrencias] = useState(true);
   const [permitirMultisselecao, setPermitirMultisselecao] = useState(false);
@@ -316,7 +321,14 @@ function App() {
     (tiposOcorrenciaAplicados === null || tiposOcorrenciaAplicados.includes(ocorrencia.tipo))
       && (gravidadesOcorrenciaAplicadas === null || gravidadesOcorrenciaAplicadas.includes(ocorrencia.gravidade)),
   ), [ocorrencias, tiposOcorrenciaAplicados, gravidadesOcorrenciaAplicadas]);
-  const ocorrenciasIncluidasMapa = incluirOcorrenciasMapa ? ocorrenciasFiltradas : [];
+  const ocorrenciasIncluidasMapa = useMemo(
+    () => incluirOcorrenciasMapa ? ocorrenciasFiltradas : [],
+    [incluirOcorrenciasMapa, ocorrenciasFiltradas],
+  );
+  const calorOcorrencias = useMemo(
+    () => collectOccurrenceHeatSources(ocorrenciasFiltradas),
+    [ocorrenciasFiltradas],
+  );
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
   function visualizarEquipamento(ponto: Ponto) {
@@ -645,7 +657,7 @@ function App() {
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
         {erroOcorrencias && <p className="api-message api-error" role="alert">{erroOcorrencias}</p>}
-        <div className={`map-panel${mapaCalorCobertura ? ' map-coverage-active' : ''}`} hidden={abaAtiva !== 'mapa'}>
+        <div className={`map-panel${mapaCalorCobertura || mapaCalorOcorrencias ? ' map-heat-active' : ''}`} hidden={abaAtiva !== 'mapa'}>
           <Map
             pontos={exibirItensMapa ? pontosMapa : []}
             rotas={rotas}
@@ -665,6 +677,9 @@ function App() {
             temaEscuro={tema === 'dark'}
             coverageHeatEnabled={mapaCalorCobertura}
             coverageSources={cobertura.sources}
+            occurrenceHeatEnabled={mapaCalorOcorrencias}
+            occurrenceHeatSources={calorOcorrencias.sources}
+            occurrenceHeatMode={modoCalorOcorrencias}
           />
           <div className="map-heat-control" role="group" aria-label="Filtros de mapa de calor">
             <strong>Mapa de calor</strong>
@@ -676,6 +691,15 @@ function App() {
                 aria-label="Aplicar mapa de calor de cobertura"
               />
               <span>Cobertura</span>
+            </label>
+            <label className="map-heat-option">
+              <input
+                type="checkbox"
+                checked={mapaCalorOcorrencias}
+                onChange={(event) => setMapaCalorOcorrencias(event.target.checked)}
+                aria-label="Aplicar mapa de calor de ocorrências"
+              />
+              <span>Ocorrências</span>
             </label>
             {mapaCalorCobertura && (
               <>
@@ -690,6 +714,46 @@ function App() {
                   <span>Sobreposição de cobertura</span>
                   <span className="map-heat-legend-scale" style={{ background: coverageGradient }} aria-hidden="true" />
                   <div><span>Menor</span><span>Maior</span></div>
+                </div>
+              </>
+            )}
+            {mapaCalorOcorrencias && (
+              <>
+                <label className="map-heat-mode">
+                  <span>Visualizar por</span>
+                  <select
+                    value={modoCalorOcorrencias}
+                    onChange={(event) => setModoCalorOcorrencias(event.target.value as OccurrenceHeatMode)}
+                    aria-label="Visualizar mapa de calor de ocorrências por"
+                  >
+                    <option value="quantidade">Quantidade</option>
+                    <option value="gravidade">Gravidade</option>
+                    <option value="ambos">Ambos</option>
+                  </select>
+                </label>
+                <p className="map-heat-description" aria-live="polite">
+                  {calorOcorrencias.sources.length} ocorrências filtradas, inclusive ocultas ou fora da tela.
+                </p>
+                <p className="map-heat-description">
+                  {modoCalorOcorrencias === 'quantidade' && 'As cores mais quentes indicam mais ocorrências.'}
+                  {modoCalorOcorrencias === 'gravidade' && 'Cor indica gravidade média; opacidade acumula gravidade.'}
+                  {modoCalorOcorrencias === 'ambos' && 'Cor indica gravidade; opacidade indica quantidade.'}
+                </p>
+                {calorOcorrencias.excludedCount > 0 && (
+                  <p className="map-heat-description">{calorOcorrencias.excludedCount} sem coordenada válida.</p>
+                )}
+                <div className="map-heat-legend" aria-label="Escala de cores do mapa de calor de ocorrências">
+                  <span>{modoCalorOcorrencias === 'quantidade' ? 'Quantidade de ocorrências' : 'Gravidade média'}</span>
+                  <span
+                    className="map-heat-legend-scale"
+                    style={{ background: modoCalorOcorrencias === 'quantidade' ? coverageGradient : occurrenceSeverityGradient }}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    {modoCalorOcorrencias === 'quantidade'
+                      ? <><span>Menor</span><span>Maior</span></>
+                      : <><span>Baixa</span><span>Crítica</span></>}
+                  </div>
                 </div>
               </>
             )}
