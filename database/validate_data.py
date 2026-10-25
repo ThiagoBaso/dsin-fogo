@@ -183,6 +183,20 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
                            if not required_attributes[equipment["id_tipo"]].issubset(values_by_equipment[equipment_id])]
     check("atributos obrigatorios completos e valores no tipo correto", value_shape_ok and not incomplete_required,
           f"{len(incomplete_required)} equipamentos incompletos; {len(tables.get('valores_atributo', []))} valores conferidos")
+    coverage_attribute_ids = {row["id_atributo"] for row in attribute_definitions.values()
+                              if row["nome"] == "raio_cobertura_km"}
+    coverage_values = {value["id_equipamento"]: value["valor_numero"]
+                       for value in tables.get("valores_atributo", [])
+                       if value["id_atributo"] in coverage_attribute_ids}
+    coverage_ok = all(equipment_id in coverage_values and coverage_values[equipment_id] is not None
+                      and coverage_values[equipment_id] > 0 for equipment_id in eq)
+    check("raio estimado positivo em todos os equipamentos", coverage_ok,
+          f"{len(coverage_values)}/{len(eq)} equipamentos com raio informado")
+    agent_radius_ok = all(agent.get("raio_atuacao_km") is not None
+                          and 0.10 <= agent["raio_atuacao_km"] <= 25.00
+                          for agent in tables.get("agentes", []))
+    check("área estimada válida para todos os agentes", agent_radius_ok,
+          f"{sum(agent.get('raio_atuacao_km') is not None for agent in tables.get('agentes', []))}/{len(tables.get('agentes', []))} agentes com raio informado")
     radar_modalities = {"velocidade", "avanço de sinal", "faixa exclusiva", "conversão proibida", "retorno proibido"}
     modality_coverage_ok = all(radar_modalities.issubset(values_by_type_and_name[(type_id, "modalidade")])
                               for type_id in (1, 2))

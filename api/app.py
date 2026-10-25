@@ -145,7 +145,7 @@ def list_agentes(em: datetime | None = None):
     rows = fetch_all(
         """
         SELECT a.id_agente AS id, a.nome, a.matricula, a.cargo,
-               a.ativo_cadastro,
+               a.ativo_cadastro, CAST(a.raio_atuacao_km AS DOUBLE) AS raio_atuacao_km,
                o.id_orgao AS orgao_id, o.nome AS orgao_nome, o.sigla AS orgao_sigla,
                turno.id_turno AS turno_id,
                CASE WHEN %s IS NOT NULL AND turno.id_turno IS NOT NULL THEN 'em_atividade'

@@ -6,7 +6,7 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 
 - `DER_FOGO.dbml`: modelo logico.
 - `schema.sql`: schema MySQL 8.0 / InnoDB / utf8mb4.
-- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql` and `migrate_agent_vehicle_shifts.sql`: idempotent upgrades for an existing Compose database volume.
+- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql`, `migrate_agent_vehicle_shifts.sql` and `migrate_agent_coverage.sql`: idempotent upgrades for an existing Compose database volume.
 - `generate_data.py`: gera a massa SQL de demonstracao.
 - `generate_neighborhood_boundaries.py`: gera o GeoJSON de setores demonstrativos usando quarteiroes delimitados por ruas do OpenStreetMap.
 - `generate_routes.py`: cria e interpola rotas pela malha viaria OpenStreetMap de Marilia.
@@ -17,6 +17,8 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 O seed preserva os 500 equipamentos originais e inclui oito unidades de cada um dos quatro novos tipos moveis (532 equipamentos no total, 92 moveis). Cada novo cadastro tem localizacao distinta, atributos especificos, historico e ao menos tres ocorrencias e quatro viagens com posicoes GPS. O gerador cria tres viagens concluidas por equipamento movel e uma ativa quando ele esta a mais de 100 m da base. As rotas sao demonstrativas e usam a malha viaria OSM.
 
 A massa tambem inclui oito equipamentos ainda nao instalados e oito com mau funcionamento, com historico de situacao coerente.
+
+Equipamentos recebem um raio estimado de cobertura em quilometros conforme o tipo (sensores e dispositivos fixos têm alcance local; equipamentos móveis têm raios maiores). Agentes recebem uma área de atuação estimada conforme o órgão. Esses valores são sintéticos para demonstração e aparecem nos detalhes; a seed e as migrações usam valores reprodutíveis.
 
 O catalogo de atributos especificos cobre modalidade e faixas de radares; resolucao, tipo de imagem (colorida ou preto e branco), visao noturna e PTZ de cameras; dimensoes e controle de acesso de cancelas; meios de pagamento e acessibilidade de totens; capacidade por eixos e precisao de balancas; autonomia, velocidade e propulsao de patinetes; cilindrada, capacetes e equipamentos operacionais de motos e viaturas; e caracteristicas de servico, seguranca, acessibilidade e propulsao de transporte de passageiros. Radares fixos e moveis incluem as modalidades velocidade, avanco de sinal, faixa exclusiva, conversao proibida e retorno proibido. Os mesmos atributos sao usados na aba de filtros; textos e booleanos usam selecao por valores, e atributos numericos aceitam intervalo minimo e maximo.
 

@@ -1,6 +1,7 @@
 import type { ManutencaoEquipamento, OcorrenciaEquipamento, RotaVeiculo } from '../../types';
 
 export const attributeLabels: Record<string, string> = {
+  raio_cobertura_km: 'Raio estimado de cobertura',
   limite_velocidade: 'Limite de velocidade',
   modalidade: 'Modalidade de fiscalização',
   resolucao: 'Resolução',

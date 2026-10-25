@@ -126,6 +126,7 @@ Table agentes {
   nome varchar(150) [not null]
   cargo varchar(100) [not null, note: 'agente de transito, guarda municipal, policial etc.']
   ativo_cadastro boolean [not null]
+  raio_atuacao_km decimal(5,2) [note: 'Raio estimado de atuação, sintético para demonstração']
   indexes {
     (id_orgao, matricula) [unique]
   }

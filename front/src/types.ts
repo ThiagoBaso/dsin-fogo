@@ -17,6 +17,7 @@ export interface Agente {
   matricula: string;
   cargo: string;
   ativo_cadastro: boolean;
+  raio_atuacao_km: number | null;
   orgao_id: number;
   orgao_nome: string;
   orgao_sigla: string | null;

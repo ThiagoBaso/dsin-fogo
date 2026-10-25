@@ -219,6 +219,48 @@ DROP PROCEDURE add_agent_shift_vehicle_check;
     return "\n".join(parts)
 
 
+def agent_coverage_migration_sql(agent_coverage):
+    """Add estimated service radii to agents on persistent database volumes."""
+    parts = ["""-- Add synthetic service-area radii to demo agents without replacing existing values.
+DROP PROCEDURE IF EXISTS migrate_agent_coverage;
+DELIMITER //
+CREATE PROCEDURE migrate_agent_coverage()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'agentes' AND column_name = 'raio_atuacao_km'
+  ) THEN
+    ALTER TABLE agentes ADD COLUMN raio_atuacao_km DECIMAL(5,2) NULL AFTER ativo_cadastro;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = DATABASE() AND table_name = 'agentes' AND constraint_name = 'chk_agente_raio_atuacao'
+  ) THEN
+    ALTER TABLE agentes ADD CONSTRAINT chk_agente_raio_atuacao
+      CHECK (raio_atuacao_km IS NULL OR raio_atuacao_km BETWEEN 0.10 AND 25.00);
+  END IF;
+END//
+DELIMITER ;
+CALL migrate_agent_coverage();
+DROP PROCEDURE migrate_agent_coverage;
+
+CREATE TEMPORARY TABLE migration_agent_coverage (
+  id_agente INT UNSIGNED NOT NULL PRIMARY KEY,
+  raio_atuacao_km DECIMAL(5,2) NOT NULL
+) ENGINE=InnoDB;
+""",
+        insert("migration_agent_coverage", ["id_agente", "raio_atuacao_km"], agent_coverage)
+        .replace("INSERT INTO `migration_agent_coverage`", "INSERT INTO migration_agent_coverage"),
+        """UPDATE agentes AS agent
+JOIN migration_agent_coverage AS coverage ON coverage.id_agente = agent.id_agente
+SET agent.raio_atuacao_km = coverage.raio_atuacao_km
+WHERE agent.raio_atuacao_km IS NULL AND agent.matricula LIKE 'DEMO-AG-%';
+
+DROP TEMPORARY TABLE migration_agent_coverage;
+"""]
+    return "\n".join(parts)
+
+
 def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = False):
     rng = random.Random(seed)
     graph = load_graph(graph_path)
@@ -334,6 +376,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         (15, "quantidade_cameras", "numero", "unidades", True), (15, "resolucao", "texto", None, True),
         (15, "visao_noturna", "booleano", None, True), (15, "tipo_propulsao", "texto", None, True),
         (15, "tracao", "texto", None, True), (15, "radio_operacional", "booleano", None, True),
+        *[(type_id, "raio_cobertura_km", "numero", "km", True) for type_id in range(1, 16)],
     ]
     add("atributos_tipo", ["id_atributo", "id_tipo", "nome", "tipo_valor", "unidade", "obrigatorio"],
         [(i + 1, *a) for i, a in enumerate(attr_defs)])
@@ -341,6 +384,14 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     for i, a in enumerate(attr_defs, 1):
         attr_by_type.setdefault(a[0], []).append(i)
     values = []
+    equipment_coverage_rng = random.Random(seed ^ 0xC0A3)
+    equipment_coverage_km = {
+        1: (0.12, 0.28), 2: (0.10, 0.24), 3: (0.08, 0.22),
+        4: (0.01, 0.04), 5: (0.10, 0.35), 6: (0.03, 0.12),
+        7: (1.00, 2.50), 8: (1.50, 3.50), 9: (3.00, 7.00),
+        10: (2.00, 5.00), 11: (2.00, 5.00), 12: (2.00, 7.00),
+        13: (1.50, 4.50), 14: (3.00, 8.00), 15: (1.50, 4.00),
+    }
     modalities = ["velocidade", "avan\u00e7o de sinal", "faixa exclusiva", "convers\u00e3o proibida", "retorno proibido"]
     radar_modality = {}
     for radar_type in (1, 2):
@@ -384,6 +435,8 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             elif name == "cilindrada_cc": value = (None, rng.choice([125, 150, 160, 250, 300, 500]), None)
             elif name == "capacidade_passageiros": value = (None, rng.choice([4, 5, 6, 7]), None)
             elif name == "capacidade_alunos": value = (None, rng.choice([15, 20, 25, 30, 35, 40]), None)
+            elif name == "raio_cobertura_km":
+                value = (None, round(equipment_coverage_rng.uniform(*equipment_coverage_km[type_id]), 2), None)
             else: raise ValueError(f"No seed generator for equipment attribute {name!r}")
             if any(item is not None for item in value):
                 values.append((equip_id, attr_id, *value))
@@ -417,7 +470,12 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         4: "fiscal",
     }
     agents = [(*agent[:5], role_by_organization[agent[1]], agent[6]) for agent in agents]
-    add("agentes", ["id_agente", "id_orgao", "id_localizacao_base", "matricula", "nome", "cargo", "ativo_cadastro"], agents)
+    agent_coverage_rng = random.Random(seed ^ 0xA63E)
+    agent_coverage_km = {
+        1: (2.00, 5.00), 2: (2.50, 6.00), 3: (4.00, 10.00), 4: (1.50, 4.00),
+    }
+    agents = [(*agent, round(agent_coverage_rng.uniform(*agent_coverage_km[agent[1]]), 2)) for agent in agents]
+    add("agentes", ["id_agente", "id_orgao", "id_localizacao_base", "matricula", "nome", "cargo", "ativo_cadastro", "raio_atuacao_km"], agents)
 
     capacity_by_type = {2: 1, 8: 1, 9: 2, 10: 2, 11: 2}
     eligible_vehicles = [
@@ -591,6 +649,11 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     agent_migration_temp.write_text(
         agent_vehicle_migration_sql(agent_migration_assignments), encoding="utf-8")
     agent_migration_temp.replace(agent_migration_path)
+    agent_coverage_path = out.with_name("migrate_agent_coverage.sql")
+    agent_coverage_temp = agent_coverage_path.with_suffix(agent_coverage_path.suffix + ".tmp")
+    agent_coverage_temp.write_text(
+        agent_coverage_migration_sql([(row[0], row[7]) for row in agents]), encoding="utf-8")
+    agent_coverage_temp.replace(agent_coverage_path)
     summary = {
         **counts,
         "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type),

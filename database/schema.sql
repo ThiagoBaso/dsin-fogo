@@ -135,9 +135,11 @@ CREATE TABLE IF NOT EXISTS agentes (
   nome VARCHAR(150) NOT NULL,
   cargo VARCHAR(100) NOT NULL,
   ativo_cadastro BOOLEAN NOT NULL DEFAULT TRUE,
+  raio_atuacao_km DECIMAL(5,2),
   UNIQUE KEY uq_agente_orgao_matricula (id_orgao, matricula),
   CONSTRAINT fk_agente_orgao FOREIGN KEY (id_orgao) REFERENCES orgaos(id_orgao),
-  CONSTRAINT fk_agente_base FOREIGN KEY (id_localizacao_base) REFERENCES localizacoes(id_localizacao)
+  CONSTRAINT fk_agente_base FOREIGN KEY (id_localizacao_base) REFERENCES localizacoes(id_localizacao),
+  CONSTRAINT chk_agente_raio_atuacao CHECK (raio_atuacao_km IS NULL OR raio_atuacao_km BETWEEN 0.10 AND 25.00)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS turnos_agente (
