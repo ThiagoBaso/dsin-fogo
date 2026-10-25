@@ -126,7 +126,7 @@ Table agentes {
   nome varchar(150) [not null]
   cargo varchar(100) [not null, note: 'agente de transito, guarda municipal, policial etc.']
   ativo_cadastro boolean [not null]
-  raio_atuacao_km decimal(5,2) [note: 'Raio estimado de atuação, sintético para demonstração']
+  raio_atuacao_km decimal(5,2) [note: 'Raio ao redor da posição exibida no mapa: 100 a 300 m para agentes em veículo; 20 a 60 m para agentes sem veículo; armazenado em km']
   indexes {
     (id_orgao, matricula) [unique]
   }

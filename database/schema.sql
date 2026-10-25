@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS agentes (
   UNIQUE KEY uq_agente_orgao_matricula (id_orgao, matricula),
   CONSTRAINT fk_agente_orgao FOREIGN KEY (id_orgao) REFERENCES orgaos(id_orgao),
   CONSTRAINT fk_agente_base FOREIGN KEY (id_localizacao_base) REFERENCES localizacoes(id_localizacao),
-  CONSTRAINT chk_agente_raio_atuacao CHECK (raio_atuacao_km IS NULL OR raio_atuacao_km BETWEEN 0.10 AND 25.00)
+  CONSTRAINT chk_agente_raio_atuacao_metros CHECK (raio_atuacao_km IS NULL OR raio_atuacao_km BETWEEN 0.01 AND 25.00)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS turnos_agente (

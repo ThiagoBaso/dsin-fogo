@@ -122,8 +122,8 @@ export default function AgentDetails({
             <dl>
               <Field label="Turno atual" value={agente.turno_status ? shiftLabels[agente.turno_status] : 'Sem turno atual'} />
               <Field
-                label="Área de atuação (raio estimado)"
-                value={agente.raio_atuacao_km === null ? null : `${agente.raio_atuacao_km.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} km`}
+                label="Raio de atuação na posição atual"
+                value={agente.raio_atuacao_km === null ? null : `${(agente.raio_atuacao_km * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} m`}
               />
               <Field label="Início previsto" value={formatDate(agente.turno_inicio_previsto)} />
               <Field label="Fim previsto" value={formatDate(agente.turno_fim_previsto)} />

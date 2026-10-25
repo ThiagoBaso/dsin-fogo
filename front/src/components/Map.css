@@ -1,4 +1,50 @@
 .equipment-div-icon { background: transparent; border: 0; }
+.map-heat-control {
+  position: absolute;
+  bottom: 26px;
+  left: 12px;
+  z-index: 1000;
+  display: grid;
+  width: min(190px, calc(100% - 24px));
+  gap: 7px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--dsin-border);
+  border-radius: 10px;
+  background: var(--dsin-surface);
+  box-shadow: 0 2px 12px #0003;
+  color: var(--dsin-ink);
+  font-size: 12px;
+}
+.map-heat-control > strong { font-size: 12px; }
+.map-heat-option {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsin-text);
+  cursor: pointer;
+}
+.map-heat-option input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--dsin-yellow);
+}
+.map-heat-option input:focus-visible { outline: 3px solid var(--dsin-focus); outline-offset: 2px; }
+.map-heat-description { margin: 0; color: var(--dsin-muted); font-size: 10px; line-height: 1.35; }
+.map-heat-legend { display: grid; gap: 3px; color: var(--dsin-muted); font-size: 10px; }
+.map-heat-legend-scale {
+  height: 7px;
+  border-radius: 999px;
+}
+.map-heat-legend > div { display: flex; justify-content: space-between; }
+.map-coverage-active .equipment-marker,
+.map-coverage-active .agent-marker { opacity: .45; }
+.map-coverage-active .equipment-marker.is-selected,
+.map-coverage-active .agent-marker.is-selected,
+.map-coverage-active .equipment-div-icon:is(:hover, :focus) .equipment-marker,
+.map-coverage-active .agent-div-icon:is(:hover, :focus) .agent-marker { opacity: 1; }
 .leaflet-tile-pane.map-theme-dark {
   filter: invert(.88) hue-rotate(180deg) brightness(.84) contrast(.9) saturate(.62);
 }

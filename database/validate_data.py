@@ -192,11 +192,30 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
                       and coverage_values[equipment_id] > 0 for equipment_id in eq)
     check("raio estimado positivo em todos os equipamentos", coverage_ok,
           f"{len(coverage_values)}/{len(eq)} equipamentos com raio informado")
-    agent_radius_ok = all(agent.get("raio_atuacao_km") is not None
-                          and 0.10 <= agent["raio_atuacao_km"] <= 25.00
-                          for agent in tables.get("agentes", []))
+    mobile_vehicle_ids = {
+        equipment_id for equipment_id, equipment in eq.items()
+        if 7 <= equipment["id_tipo"] <= 15
+    }
+    mobile_coverage_ok = all(
+        equipment_id in coverage_values and 0.10 <= coverage_values[equipment_id] <= 0.30
+        for equipment_id in mobile_vehicle_ids
+    )
+    check("cobertura de veículos móveis entre 100 e 300 m", mobile_coverage_ok,
+          f"{sum(equipment_id in coverage_values for equipment_id in mobile_vehicle_ids)}/{len(mobile_vehicle_ids)} veículos com raio válido")
+    vehicle_agent_ids = {
+        shift["id_agente"] for shift in tables.get("turnos_agente", [])
+        if shift.get("id_equipamento") is not None
+        and shift.get("status") in ("em_atividade", "programado")
+    }
+    agent_radius_ok = all(
+        agent.get("raio_atuacao_km") is not None
+        and (0.10 <= agent["raio_atuacao_km"] <= 0.30
+             if agent["id_agente"] in vehicle_agent_ids
+             else 0.02 <= agent["raio_atuacao_km"] <= 0.06)
+        for agent in tables.get("agentes", [])
+    )
     check("área estimada válida para todos os agentes", agent_radius_ok,
-          f"{sum(agent.get('raio_atuacao_km') is not None for agent in tables.get('agentes', []))}/{len(tables.get('agentes', []))} agentes com raio informado")
+          f"{sum(agent.get('raio_atuacao_km') is not None for agent in tables.get('agentes', []))}/{len(tables.get('agentes', []))} agentes com raio informado; {len(vehicle_agent_ids)} em veículos (100–300 m), demais em base (20–60 m)")
     radar_modalities = {"velocidade", "avanço de sinal", "faixa exclusiva", "conversão proibida", "retorno proibido"}
     modality_coverage_ok = all(radar_modalities.issubset(values_by_type_and_name[(type_id, "modalidade")])
                               for type_id in (1, 2))

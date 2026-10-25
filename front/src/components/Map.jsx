@@ -6,6 +6,7 @@ import AgentMarkers from './map/AgentMarkers';
 import NeighborhoodLayer from './map/NeighborhoodLayer';
 import RoutesLayer from './map/RoutesLayer';
 import OccurrenceMarkers from './map/OccurrenceMarkers';
+import CoverageHeatLayer from './map/CoverageHeatLayer';
 import 'leaflet/dist/leaflet.css';
 import './Map.css';
 
@@ -39,6 +40,8 @@ export default function MapaMarilia({
   showOccurrences = true,
   selectedOccurrenceId,
   onSelectOccurrence,
+  coverageHeatEnabled = false,
+  coverageSources = [],
 }) {
   return (
     <MapContainer
@@ -54,6 +57,10 @@ export default function MapaMarilia({
       />
       <NeighborhoodLayer enabled={exibirContornoBairros} />
       <RoutesLayer rotas={rotas} />
+      <CoverageHeatLayer
+        enabled={coverageHeatEnabled}
+        sources={coverageSources}
+      />
       <EquipmentMarkers
         pontos={pontos}
         selecionadosIds={selecionadosIds}

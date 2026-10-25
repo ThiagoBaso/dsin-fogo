@@ -6,7 +6,7 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 
 - `DER_FOGO.dbml`: modelo logico.
 - `schema.sql`: schema MySQL 8.0 / InnoDB / utf8mb4.
-- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql`, `migrate_agent_vehicle_shifts.sql` and `migrate_agent_coverage.sql`: idempotent upgrades for an existing Compose database volume.
+- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql`, `migrate_agent_vehicle_shifts.sql`, `migrate_agent_coverage.sql` and `migrate_vehicle_coverage.sql`: idempotent upgrades for an existing Compose database volume.
 - `generate_data.py`: gera a massa SQL de demonstracao.
 - `generate_neighborhood_boundaries.py`: gera o GeoJSON de setores demonstrativos usando quarteiroes delimitados por ruas do OpenStreetMap.
 - `generate_routes.py`: cria e interpola rotas pela malha viaria OpenStreetMap de Marilia.
@@ -18,7 +18,7 @@ O seed preserva os 500 equipamentos originais e inclui oito unidades de cada um 
 
 A massa tambem inclui oito equipamentos ainda nao instalados e oito com mau funcionamento, com historico de situacao coerente.
 
-Equipamentos recebem um raio estimado de cobertura em quilometros conforme o tipo (sensores e dispositivos fixos têm alcance local; equipamentos móveis têm raios maiores). Agentes recebem uma área de atuação estimada conforme o órgão. Esses valores são sintéticos para demonstração e aparecem nos detalhes; a seed e as migrações usam valores reprodutíveis.
+Veículos e patinetes móveis recebem raios de cobertura de 100 a 300 metros; radares móveis ficam entre 100 e 240 metros. A cobertura é calculada ao redor da posição atual do equipamento (GPS mais recente, ou posição cadastrada quando não houver GPS). Agentes em turnos ativos ou programados com veículo recebem raios de atuação de 100 a 300 metros ao redor da posição exibida no mapa. Agentes sem veículo recebem raios locais de 20 a 60 metros ao redor da posição cadastrada. Os raios são armazenados em km e exibidos em metros nos detalhes. Esses valores são sintéticos para demonstração; a seed e as migrações usam valores reprodutíveis e atualizam valores gerados anteriores, preservando valores personalizados.
 
 O catalogo de atributos especificos cobre modalidade e faixas de radares; resolucao, tipo de imagem (colorida ou preto e branco), visao noturna e PTZ de cameras; dimensoes e controle de acesso de cancelas; meios de pagamento e acessibilidade de totens; capacidade por eixos e precisao de balancas; autonomia, velocidade e propulsao de patinetes; cilindrada, capacetes e equipamentos operacionais de motos e viaturas; e caracteristicas de servico, seguranca, acessibilidade e propulsao de transporte de passageiros. Radares fixos e moveis incluem as modalidades velocidade, avanco de sinal, faixa exclusiva, conversao proibida e retorno proibido. Os mesmos atributos sao usados na aba de filtros; textos e booleanos usam selecao por valores, e atributos numericos aceitam intervalo minimo e maximo.
 

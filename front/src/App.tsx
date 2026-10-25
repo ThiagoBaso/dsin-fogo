@@ -21,6 +21,7 @@ import {
 } from './types';
 import { equipmentSituations, equipmentTypes } from './equipmentCatalog';
 import { attributeLabels } from './components/equipment-details/labels';
+import { collectCoverageSources, coverageGradient } from './components/map/coverage';
 
 const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, situation]) => ({
   id: Number(id),
@@ -116,6 +117,7 @@ function App() {
   const [exibirApenasSelecionados, setExibirApenasSelecionados] = useState(false);
   const [exibirItensMapa, setExibirItensMapa] = useState(true);
   const [exibirAgentesMapa, setExibirAgentesMapa] = useState(true);
+  const [mapaCalorCobertura, setMapaCalorCobertura] = useState(false);
   const [incluirOcorrenciasMapa, setIncluirOcorrenciasMapa] = useState(false);
   const [exibirMarcadoresOcorrencias, setExibirMarcadoresOcorrencias] = useState(true);
   const [permitirMultisselecao, setPermitirMultisselecao] = useState(false);
@@ -296,7 +298,9 @@ function App() {
         .includes(termo))
       : agentesFiltrados;
   }, [agentesFiltrados, buscaAgentes]);
-  const agentesMapa = agentesFiltrados;
+  const agentesMapa = useMemo(() => filtrosAgentes.showOnMap ? agentesFiltrados : [],
+    [filtrosAgentes.showOnMap, agentesFiltrados]);
+  const cobertura = useMemo(() => collectCoverageSources(pontosMapa, agentesMapa), [pontosMapa, agentesMapa]);
   const opcoesTiposOcorrencia = useMemo(() => Array.from(new Set(
     ocorrencias.map((ocorrencia) => ocorrencia.tipo),
   )).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((tipo) => ({ id: tipo, label: tipo })), [ocorrencias]);
@@ -629,7 +633,7 @@ function App() {
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
         {erroOcorrencias && <p className="api-message api-error" role="alert">{erroOcorrencias}</p>}
-        <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
+        <div className={`map-panel${mapaCalorCobertura ? ' map-coverage-active' : ''}`} hidden={abaAtiva !== 'mapa'}>
           <Map
             pontos={exibirItensMapa ? pontosMapa : []}
             rotas={rotas}
@@ -647,7 +651,37 @@ function App() {
             selecionadosIds={selecionadosIds}
             exibirContornoBairros={exibirContornoBairros}
             temaEscuro={tema === 'dark'}
+            coverageHeatEnabled={mapaCalorCobertura}
+            coverageSources={cobertura.sources}
           />
+          <div className="map-heat-control" role="group" aria-label="Filtros de mapa de calor">
+            <strong>Mapa de calor</strong>
+            <label className="map-heat-option">
+              <input
+                type="checkbox"
+                checked={mapaCalorCobertura}
+                onChange={(event) => setMapaCalorCobertura(event.target.checked)}
+                aria-label="Aplicar mapa de calor de cobertura"
+              />
+              <span>Cobertura</span>
+            </label>
+            {mapaCalorCobertura && (
+              <>
+                <p className="map-heat-description" aria-live="polite">
+                  {cobertura.equipmentCount} equipamentos · {cobertura.agentCount} agentes.
+                  {' '}Inclui pontos fora da tela e marcadores ocultos.
+                </p>
+                {cobertura.excludedCount > 0 && (
+                  <p className="map-heat-description">{cobertura.excludedCount} sem posição ou alcance válido.</p>
+                )}
+                <div className="map-heat-legend" aria-label="Sobreposição de cobertura: escala de cores fixa">
+                  <span>Sobreposição de cobertura</span>
+                  <span className="map-heat-legend-scale" style={{ background: coverageGradient }} aria-hidden="true" />
+                  <div><span>Menor</span><span>Maior</span></div>
+                </div>
+              </>
+            )}
+          </div>
           <div className="map-selection-summary" aria-label="Contagem de selecao no mapa" aria-live="polite">
             <div className="map-selection-count-row">
               <label className="map-selection-visibility">

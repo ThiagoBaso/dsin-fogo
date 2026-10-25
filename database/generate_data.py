@@ -127,11 +127,73 @@ JOIN atributos_tipo AS attribute
  AND attribute.nome = staged.nome
 ON DUPLICATE KEY UPDATE
   valor_texto=VALUES(valor_texto),
-  valor_numero=VALUES(valor_numero),
+  valor_numero=CASE WHEN EXISTS (
+    SELECT 1 FROM atributos_tipo AS existing_attribute
+    WHERE existing_attribute.id_atributo = VALUES(id_atributo)
+      AND existing_attribute.nome = 'raio_cobertura_km'
+  ) THEN valores_atributo.valor_numero ELSE VALUES(valor_numero) END,
   valor_booleano=VALUES(valor_booleano);
 COMMIT;
 """]
     return "\n".join(parts)
+
+
+def generate_equipment_coverage(equipment_type, seed):
+    """Generate equipment coverage radii and migrations for prior vehicle values, in kilometres."""
+    previous_ranges = {
+        1: (0.12, 0.28), 2: (0.10, 0.24), 3: (0.08, 0.22),
+        4: (0.01, 0.04), 5: (0.10, 0.35), 6: (0.03, 0.12),
+        7: (1.00, 2.50), 8: (1.50, 3.50), 9: (3.00, 7.00),
+        10: (2.00, 5.00), 11: (2.00, 5.00), 12: (2.00, 7.00),
+        13: (1.50, 4.50), 14: (3.00, 8.00), 15: (1.50, 4.00),
+    }
+    current_ranges = {
+        **{type_id: previous_ranges[type_id] for type_id in range(1, 7)},
+        7: (0.10, 0.20), 8: (0.10, 0.20), 9: (0.20, 0.30),
+        10: (0.20, 0.30), 11: (0.15, 0.25), 12: (0.10, 0.20),
+        13: (0.10, 0.20), 14: (0.20, 0.30), 15: (0.10, 0.20),
+    }
+    current_rng = random.Random(seed ^ 0xC0A3)
+    previous_rng = random.Random(seed ^ 0xC0A3)
+    coverage_by_equipment = {}
+    migration_rows = []
+    for equipment_id, type_id in equipment_type.items():
+        current_radius = round(current_rng.uniform(*current_ranges[type_id]), 2)
+        previous_radius = round(previous_rng.uniform(*previous_ranges[type_id]), 2)
+        coverage_by_equipment[equipment_id] = current_radius
+        if type_id >= 7:
+            migration_rows.append((equipment_id, type_id, previous_radius, current_radius))
+    return coverage_by_equipment, migration_rows
+
+
+def equipment_coverage_migration_sql(coverage_rows):
+    """Reduce generated mobile equipment coverage while preserving customized radii."""
+    return """-- Reduce generated mobile equipment coverage to 100-300 m; keep custom values.
+START TRANSACTION;
+CREATE TEMPORARY TABLE migration_vehicle_coverage (
+  id_equipamento INT UNSIGNED NOT NULL PRIMARY KEY,
+  id_tipo INT UNSIGNED NOT NULL,
+  raio_anterior_km DECIMAL(14,2) NOT NULL,
+  raio_novo_km DECIMAL(14,2) NOT NULL
+) ENGINE=InnoDB;
+""" + insert(
+        "migration_vehicle_coverage",
+        ["id_equipamento", "id_tipo", "raio_anterior_km", "raio_novo_km"],
+        coverage_rows,
+    ).replace("INSERT INTO `migration_vehicle_coverage`", "INSERT INTO migration_vehicle_coverage") + """
+UPDATE valores_atributo AS coverage
+JOIN migration_vehicle_coverage AS staged ON staged.id_equipamento = coverage.id_equipamento
+JOIN equipamentos AS equipment
+  ON equipment.id_equipamento = staged.id_equipamento AND equipment.id_tipo = staged.id_tipo
+JOIN atributos_tipo AS attribute
+  ON attribute.id_tipo = equipment.id_tipo AND attribute.nome = 'raio_cobertura_km'
+SET coverage.valor_numero = staged.raio_novo_km
+WHERE equipment.numero_serie = CONCAT('DEMO-', LPAD(staged.id_equipamento, 5, '0'))
+  AND coverage.id_atributo = attribute.id_atributo
+  AND coverage.valor_numero = staged.raio_anterior_km;
+DROP TEMPORARY TABLE migration_vehicle_coverage;
+COMMIT;
+"""
 
 
 def agent_vehicle_migration_sql(assignments):
@@ -219,9 +281,29 @@ DROP PROCEDURE add_agent_shift_vehicle_check;
     return "\n".join(parts)
 
 
+def generate_agent_coverage(agents, seed, agents_with_vehicles=()):
+    """Generate separate current and previous radii for vehicle and base agents, in kilometres."""
+    current_rng = random.Random(seed ^ 0xA63E)
+    previous_rng = random.Random(seed ^ 0xA63E)
+    previous_local_rng = random.Random(seed ^ 0xA63E)
+    base_ranges_km = {1: (0.02, 0.04), 2: (0.03, 0.05), 3: (0.04, 0.06), 4: (0.02, 0.03)}
+    vehicle_ranges_km = {1: (0.10, 0.16), 2: (0.12, 0.22), 3: (0.20, 0.30), 4: (0.10, 0.18)}
+    previous_ranges_km = {1: (2.00, 5.00), 2: (2.50, 6.00), 3: (4.00, 10.00), 4: (1.50, 4.00)}
+    vehicle_agents = set(agents_with_vehicles)
+    rows = []
+    for agent in agents:
+        organization_id = agent[1]
+        is_vehicle_agent = agent[0] in vehicle_agents
+        current_ranges = vehicle_ranges_km if is_vehicle_agent else base_ranges_km
+        rows.append((agent[0], round(current_rng.uniform(*current_ranges[organization_id]), 2),
+                     round(previous_rng.uniform(*previous_ranges_km[organization_id]), 2),
+                     round(previous_local_rng.uniform(*base_ranges_km[organization_id]), 2)))
+    return rows
+
+
 def agent_coverage_migration_sql(agent_coverage):
-    """Add estimated service radii to agents on persistent database volumes."""
-    parts = ["""-- Add synthetic service-area radii to demo agents without replacing existing values.
+    """Apply local base and vehicle radii on persistent database volumes."""
+    parts = ["""-- Set demo radii (20-60 m at bases, 100-300 m in vehicles), preserving custom values.
 DROP PROCEDURE IF EXISTS migrate_agent_coverage;
 DELIMITER //
 CREATE PROCEDURE migrate_agent_coverage()
@@ -232,12 +314,18 @@ BEGIN
   ) THEN
     ALTER TABLE agentes ADD COLUMN raio_atuacao_km DECIMAL(5,2) NULL AFTER ativo_cadastro;
   END IF;
-  IF NOT EXISTS (
+  IF EXISTS (
     SELECT 1 FROM information_schema.table_constraints
     WHERE constraint_schema = DATABASE() AND table_name = 'agentes' AND constraint_name = 'chk_agente_raio_atuacao'
   ) THEN
-    ALTER TABLE agentes ADD CONSTRAINT chk_agente_raio_atuacao
-      CHECK (raio_atuacao_km IS NULL OR raio_atuacao_km BETWEEN 0.10 AND 25.00);
+    ALTER TABLE agentes DROP CHECK chk_agente_raio_atuacao;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_schema = DATABASE() AND table_name = 'agentes' AND constraint_name = 'chk_agente_raio_atuacao_metros'
+  ) THEN
+    ALTER TABLE agentes ADD CONSTRAINT chk_agente_raio_atuacao_metros
+      CHECK (raio_atuacao_km IS NULL OR raio_atuacao_km BETWEEN 0.01 AND 25.00);
   END IF;
 END//
 DELIMITER ;
@@ -246,15 +334,24 @@ DROP PROCEDURE migrate_agent_coverage;
 
 CREATE TEMPORARY TABLE migration_agent_coverage (
   id_agente INT UNSIGNED NOT NULL PRIMARY KEY,
-  raio_atuacao_km DECIMAL(5,2) NOT NULL
+  raio_atuacao_km DECIMAL(5,2) NOT NULL,
+  raio_anterior_km DECIMAL(5,2) NOT NULL,
+  raio_base_anterior_km DECIMAL(5,2) NOT NULL
 ) ENGINE=InnoDB;
 """,
-        insert("migration_agent_coverage", ["id_agente", "raio_atuacao_km"], agent_coverage)
+        insert("migration_agent_coverage", ["id_agente", "raio_atuacao_km", "raio_anterior_km", "raio_base_anterior_km"], agent_coverage)
         .replace("INSERT INTO `migration_agent_coverage`", "INSERT INTO migration_agent_coverage"),
         """UPDATE agentes AS agent
 JOIN migration_agent_coverage AS coverage ON coverage.id_agente = agent.id_agente
-SET agent.raio_atuacao_km = coverage.raio_atuacao_km
-WHERE agent.raio_atuacao_km IS NULL AND agent.matricula LIKE 'DEMO-AG-%';
+SET agent.raio_atuacao_km = CASE WHEN EXISTS (
+  SELECT 1 FROM turnos_agente AS turno
+  WHERE turno.id_agente = agent.id_agente AND turno.id_equipamento IS NOT NULL
+    AND turno.status IN ('em_atividade', 'programado')
+) THEN coverage.raio_atuacao_km ELSE coverage.raio_base_anterior_km END
+WHERE (agent.raio_atuacao_km IS NULL
+       OR agent.raio_atuacao_km = coverage.raio_anterior_km
+       OR agent.raio_atuacao_km = coverage.raio_base_anterior_km)
+  AND agent.matricula = CONCAT('DEMO-AG-', LPAD(coverage.id_agente, 4, '0'));
 
 DROP TEMPORARY TABLE migration_agent_coverage;
 """]
@@ -384,14 +481,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     for i, a in enumerate(attr_defs, 1):
         attr_by_type.setdefault(a[0], []).append(i)
     values = []
-    equipment_coverage_rng = random.Random(seed ^ 0xC0A3)
-    equipment_coverage_km = {
-        1: (0.12, 0.28), 2: (0.10, 0.24), 3: (0.08, 0.22),
-        4: (0.01, 0.04), 5: (0.10, 0.35), 6: (0.03, 0.12),
-        7: (1.00, 2.50), 8: (1.50, 3.50), 9: (3.00, 7.00),
-        10: (2.00, 5.00), 11: (2.00, 5.00), 12: (2.00, 7.00),
-        13: (1.50, 4.50), 14: (3.00, 8.00), 15: (1.50, 4.00),
-    }
+    equipment_coverage_by_id, vehicle_coverage_migration = generate_equipment_coverage(equipment_type, seed)
     modalities = ["velocidade", "avan\u00e7o de sinal", "faixa exclusiva", "convers\u00e3o proibida", "retorno proibido"]
     radar_modality = {}
     for radar_type in (1, 2):
@@ -436,7 +526,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             elif name == "capacidade_passageiros": value = (None, rng.choice([4, 5, 6, 7]), None)
             elif name == "capacidade_alunos": value = (None, rng.choice([15, 20, 25, 30, 35, 40]), None)
             elif name == "raio_cobertura_km":
-                value = (None, round(equipment_coverage_rng.uniform(*equipment_coverage_km[type_id]), 2), None)
+                value = (None, equipment_coverage_by_id[equip_id], None)
             else: raise ValueError(f"No seed generator for equipment attribute {name!r}")
             if any(item is not None for item in value):
                 values.append((equip_id, attr_id, *value))
@@ -470,12 +560,6 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         4: "fiscal",
     }
     agents = [(*agent[:5], role_by_organization[agent[1]], agent[6]) for agent in agents]
-    agent_coverage_rng = random.Random(seed ^ 0xA63E)
-    agent_coverage_km = {
-        1: (2.00, 5.00), 2: (2.50, 6.00), 3: (4.00, 10.00), 4: (1.50, 4.00),
-    }
-    agents = [(*agent, round(agent_coverage_rng.uniform(*agent_coverage_km[agent[1]]), 2)) for agent in agents]
-    add("agentes", ["id_agente", "id_orgao", "id_localizacao_base", "matricula", "nome", "cargo", "ativo_cadastro", "raio_atuacao_km"], agents)
 
     capacity_by_type = {2: 1, 8: 1, 9: 2, 10: 2, 11: 2}
     eligible_vehicles = [
@@ -494,6 +578,11 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         agent_id: (vehicle_seats[index], "em_atividade" if index < active_shift_count else "programado")
         for index, agent_id in enumerate(active_agent_ids[:non_ended_count])
     }
+
+    agent_coverage = generate_agent_coverage(agents, seed, agent_assignments)
+    radius_by_agent = {agent_id: radius for agent_id, radius, _, _ in agent_coverage}
+    agents = [(*agent, radius_by_agent[agent[0]]) for agent in agents]
+    add("agentes", ["id_agente", "id_orgao", "id_localizacao_base", "matricula", "nome", "cargo", "ativo_cadastro", "raio_atuacao_km"], agents)
 
     shifts = []
     for i in range(1, 101):
@@ -640,6 +729,11 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     attributes_migration_temp.write_text(
         equipment_attributes_migration_sql(attribute_definitions, attribute_migration_values), encoding="utf-8")
     attributes_migration_temp.replace(attributes_migration_path)
+    vehicle_coverage_path = out.with_name("migrate_vehicle_coverage.sql")
+    vehicle_coverage_temp = vehicle_coverage_path.with_suffix(vehicle_coverage_path.suffix + ".tmp")
+    vehicle_coverage_temp.write_text(
+        equipment_coverage_migration_sql(vehicle_coverage_migration), encoding="utf-8")
+    vehicle_coverage_temp.replace(vehicle_coverage_path)
     agent_migration_assignments = [
         (row[1], row[2], row[3], row[8])
         for row in shifts if row[8] != "encerrado"
@@ -652,7 +746,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     agent_coverage_path = out.with_name("migrate_agent_coverage.sql")
     agent_coverage_temp = agent_coverage_path.with_suffix(agent_coverage_path.suffix + ".tmp")
     agent_coverage_temp.write_text(
-        agent_coverage_migration_sql([(row[0], row[7]) for row in agents]), encoding="utf-8")
+        agent_coverage_migration_sql(agent_coverage), encoding="utf-8")
     agent_coverage_temp.replace(agent_coverage_path)
     summary = {
         **counts,
