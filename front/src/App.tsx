@@ -6,6 +6,7 @@ import ItemList from './components/ItemList';
 import AgentList from './components/AgentList';
 import AgentDetails from './components/AgentDetails';
 import EquipmentDetails from './components/EquipmentDetails';
+import OccurrenceDetails from './components/OccurrenceDetails';
 import FilterPanel from './components/FilterPanel';
 import {
   Aba,
@@ -14,6 +15,7 @@ import {
   AttributeFilterOption,
   AttributeFilterState,
   LocationFilters,
+  OcorrenciaMapa,
   Ponto,
   RotaVeiculo,
 } from './types';
@@ -25,6 +27,13 @@ const equipmentSituationOptions = Object.entries(equipmentSituations).map(([id, 
   label: situation.label,
 }));
 
+const occurrenceSeverityOptions = [
+  { id: 'baixa', label: 'Baixa' },
+  { id: 'media', label: 'Média' },
+  { id: 'alta', label: 'Alta' },
+  { id: 'critica', label: 'Crítica' },
+];
+
 const emptyLocationFilters: LocationFilters = {
   bairro: '',
   regiao: '',
@@ -35,6 +44,12 @@ const emptyLocationFilters: LocationFilters = {
 
 function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function startOfTodayValue() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return toLocalDateTimeValue(today);
 }
 
 function getStoredTheme(): 'light' | 'dark' {
@@ -69,6 +84,13 @@ function App() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [erroRotas, setErroRotas] = useState('');
+  const [ocorrencias, setOcorrencias] = useState<OcorrenciaMapa[]>([]);
+  const [tiposOcorrenciaSelecionados, setTiposOcorrenciaSelecionados] = useState<string[] | null>(null);
+  const [tiposOcorrenciaAplicados, setTiposOcorrenciaAplicados] = useState<string[] | null>(null);
+  const [gravidadesOcorrenciaSelecionadas, setGravidadesOcorrenciaSelecionadas] = useState<string[] | null>(null);
+  const [gravidadesOcorrenciaAplicadas, setGravidadesOcorrenciaAplicadas] = useState<string[] | null>(null);
+  const [carregandoOcorrencias, setCarregandoOcorrencias] = useState(true);
+  const [erroOcorrencias, setErroOcorrencias] = useState('');
   const [tiposSelecionados, setTiposSelecionados] = useState<number[]>([1]);
   const [tiposAplicados, setTiposAplicados] = useState<number[]>([1]);
   const [situacoesSelecionadas, setSituacoesSelecionadas] = useState<number[]>(
@@ -83,8 +105,9 @@ function App() {
   const [agentesSelecionadosIds, setAgentesSelecionadosIds] = useState<number[]>([]);
   const [detalhesId, setDetalhesId] = useState<number | null>(null);
   const [detalhesAgenteId, setDetalhesAgenteId] = useState<number | null>(null);
+  const [ocorrenciaDetalhes, setOcorrenciaDetalhes] = useState<OcorrenciaMapa | null>(null);
   const [filtrosAgentes, setFiltrosAgentes] = useState<AgentFilterState>({
-    showOnMap: true,
+    showOnMap: false,
     organizationIds: null,
     roles: null,
     registrationStatuses: null,
@@ -92,6 +115,9 @@ function App() {
   });
   const [exibirApenasSelecionados, setExibirApenasSelecionados] = useState(false);
   const [exibirItensMapa, setExibirItensMapa] = useState(true);
+  const [exibirAgentesMapa, setExibirAgentesMapa] = useState(true);
+  const [incluirOcorrenciasMapa, setIncluirOcorrenciasMapa] = useState(false);
+  const [exibirMarcadoresOcorrencias, setExibirMarcadoresOcorrencias] = useState(true);
   const [permitirMultisselecao, setPermitirMultisselecao] = useState(false);
   const [filtrosLocalizacao, setFiltrosLocalizacao] = useState<LocationFilters>(emptyLocationFilters);
   const [localizacaoAplicada, setLocalizacaoAplicada] = useState<LocationFilters>(emptyLocationFilters);
@@ -99,6 +125,14 @@ function App() {
   const [modoData, setModoData] = useState<'atual' | 'historico'>('atual');
   const [dataHoraSelecionada, setDataHoraSelecionada] = useState(() => toLocalDateTimeValue(new Date()));
   const [dataHoraAplicada, setDataHoraAplicada] = useState<string | null>(null);
+  const [modoPeriodoOcorrencias, setModoPeriodoOcorrencias] = useState<'atual' | 'periodo'>('atual');
+  const [inicioOcorrencias, setInicioOcorrencias] = useState(startOfTodayValue);
+  const [fimOcorrencias, setFimOcorrencias] = useState(() => toLocalDateTimeValue(new Date()));
+  const [periodoOcorrenciasAplicado, setPeriodoOcorrenciasAplicado] = useState({
+    mode: 'atual' as 'atual' | 'periodo',
+    start: startOfTodayValue(),
+    end: toLocalDateTimeValue(new Date()),
+  });
   const [painelExpandido, setPainelExpandido] = useState(true);
   const painelDetalhes = useRef<HTMLElement>(null);
   const scrollDetalhesPendente = useRef<number | null>(null);
@@ -263,22 +297,39 @@ function App() {
       : agentesFiltrados;
   }, [agentesFiltrados, buscaAgentes]);
   const agentesMapa = agentesFiltrados;
+  const opcoesTiposOcorrencia = useMemo(() => Array.from(new Set(
+    ocorrencias.map((ocorrencia) => ocorrencia.tipo),
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR')).map((tipo) => ({ id: tipo, label: tipo })), [ocorrencias]);
+  const ocorrenciasFiltradas = useMemo(() => ocorrencias.filter((ocorrencia) =>
+    (tiposOcorrenciaAplicados === null || tiposOcorrenciaAplicados.includes(ocorrencia.tipo))
+      && (gravidadesOcorrenciaAplicadas === null || gravidadesOcorrenciaAplicadas.includes(ocorrencia.gravidade)),
+  ), [ocorrencias, tiposOcorrenciaAplicados, gravidadesOcorrenciaAplicadas]);
+  const ocorrenciasIncluidasMapa = incluirOcorrenciasMapa ? ocorrenciasFiltradas : [];
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
   function visualizarEquipamento(ponto: Ponto) {
-    if (detalhesAgenteId !== null || detalhesId !== ponto.id) {
+    if (detalhesAgenteId !== null || ocorrenciaDetalhes !== null || detalhesId !== ponto.id) {
       scrollDetalhesPendente.current = painelDetalhes.current?.scrollTop ?? 0;
     }
     setDetalhesAgenteId(null);
+    setOcorrenciaDetalhes(null);
     setDetalhesId(ponto.id);
   }
 
   function visualizarAgente(agente: Agente) {
-    if (detalhesId !== null || detalhesAgenteId !== agente.id) {
+    if (detalhesId !== null || ocorrenciaDetalhes !== null || detalhesAgenteId !== agente.id) {
       scrollDetalhesPendente.current = painelDetalhes.current?.scrollTop ?? 0;
     }
     setDetalhesId(null);
+    setOcorrenciaDetalhes(null);
     setDetalhesAgenteId(agente.id);
+  }
+
+  function visualizarOcorrencia(ocorrencia: OcorrenciaMapa) {
+    scrollDetalhesPendente.current = painelDetalhes.current?.scrollTop ?? 0;
+    setDetalhesId(null);
+    setDetalhesAgenteId(null);
+    setOcorrenciaDetalhes(ocorrencia);
   }
 
   function selecionarAgenteNoMapa(agente: Agente) {
@@ -325,7 +376,7 @@ function App() {
     setAtributosSelecionados({});
     setAtributosAplicados({});
     setFiltrosAgentes({
-      showOnMap: true,
+      showOnMap: false,
       organizationIds: null,
       roles: null,
       registrationStatuses: null,
@@ -339,6 +390,19 @@ function App() {
     setModoData('atual');
     setDataHoraSelecionada(toLocalDateTimeValue(new Date()));
     setDataHoraAplicada(null);
+    setModoPeriodoOcorrencias('atual');
+    setInicioOcorrencias(startOfTodayValue());
+    setFimOcorrencias(toLocalDateTimeValue(new Date()));
+    setIncluirOcorrenciasMapa(false);
+    setTiposOcorrenciaSelecionados(null);
+    setTiposOcorrenciaAplicados(null);
+    setGravidadesOcorrenciaSelecionadas(null);
+    setGravidadesOcorrenciaAplicadas(null);
+    setPeriodoOcorrenciasAplicado({
+      mode: 'atual',
+      start: startOfTodayValue(),
+      end: toLocalDateTimeValue(new Date()),
+    });
     setSelecionadosIds((selecionados) => selecionados.slice(-1));
 
     const equipamentoDetalhado = pontos.find((ponto) => ponto.id === detalhesId);
@@ -373,6 +437,38 @@ function App() {
 
     return () => controller.abort();
   }, [dataHoraAplicada]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = new URLSearchParams({ modo: periodoOcorrenciasAplicado.mode });
+    if (periodoOcorrenciasAplicado.mode === 'periodo') {
+      query.set('inicio', periodoOcorrenciasAplicado.start);
+      query.set('fim', periodoOcorrenciasAplicado.end);
+    }
+
+    setCarregandoOcorrencias(true);
+    setErroOcorrencias('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/ocorrencias?${query.toString()}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<OcorrenciaMapa[]>;
+      })
+      .then((dados) => {
+        if (!controller.signal.aborted) {
+          setOcorrencias(dados);
+          setCarregandoOcorrencias(false);
+        }
+      })
+      .catch((error: Error) => {
+        if (error.name !== 'AbortError') {
+          setOcorrencias([]);
+          setCarregandoOcorrencias(false);
+          setErroOcorrencias('Não foi possível carregar as ocorrências do mapa.');
+        }
+      });
+
+    return () => controller.abort();
+  }, [periodoOcorrenciasAplicado]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -468,6 +564,25 @@ function App() {
           onValueChange: setDataHoraSelecionada,
           maxValue: toLocalDateTimeValue(new Date()),
         }}
+        occurrencePeriod={{
+          includeOnMap: incluirOcorrenciasMapa,
+          onIncludeOnMapChange: setIncluirOcorrenciasMapa,
+          mode: modoPeriodoOcorrencias,
+          onModeChange: setModoPeriodoOcorrencias,
+          start: inicioOcorrencias,
+          onStartChange: setInicioOcorrencias,
+          end: fimOcorrencias,
+          onEndChange: setFimOcorrencias,
+          maxValue: toLocalDateTimeValue(new Date()),
+        }}
+        occurrenceFilters={{
+          types: opcoesTiposOcorrencia,
+          gravities: occurrenceSeverityOptions,
+          selectedTypes: tiposOcorrenciaSelecionados,
+          onTypesChange: setTiposOcorrenciaSelecionados,
+          selectedGravities: gravidadesOcorrenciaSelecionadas,
+          onGravitiesChange: setGravidadesOcorrenciaSelecionadas,
+        }}
         display={{
           onlySelected: exibirApenasSelecionados,
           onOnlySelectedChange: setExibirApenasSelecionados,
@@ -482,6 +597,13 @@ function App() {
           setAtributosAplicados(atributosSelecionados);
           setLocalizacaoAplicada(filtrosLocalizacao);
           setDataHoraAplicada(modoData === 'historico' ? dataHoraSelecionada : null);
+          setPeriodoOcorrenciasAplicado({
+            mode: modoPeriodoOcorrencias,
+            start: inicioOcorrencias,
+            end: fimOcorrencias,
+          });
+          setTiposOcorrenciaAplicados(tiposOcorrenciaSelecionados);
+          setGravidadesOcorrenciaAplicadas(gravidadesOcorrenciaSelecionadas);
         }}
         onReset={resetarFiltros}
       />
@@ -506,6 +628,7 @@ function App() {
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
+        {erroOcorrencias && <p className="api-message api-error" role="alert">{erroOcorrencias}</p>}
         <div className="map-panel" hidden={abaAtiva !== 'mapa'}>
           <Map
             pontos={exibirItensMapa ? pontosMapa : []}
@@ -513,7 +636,11 @@ function App() {
             ativo={abaAtiva === 'mapa'}
             onSelecionar={selecionarNoMapa}
             agents={agentesMapa}
-            showAgents={filtrosAgentes.showOnMap}
+            showAgents={filtrosAgentes.showOnMap && exibirAgentesMapa}
+            occurrences={ocorrenciasIncluidasMapa}
+            showOccurrences={incluirOcorrenciasMapa && exibirMarcadoresOcorrencias}
+            selectedOccurrenceId={ocorrenciaDetalhes?.id ?? 0}
+            onSelectOccurrence={visualizarOcorrencia}
             selectedAgentId={detalhesAgenteId ?? 0}
             selectedAgentIds={agentesSelecionadosIds}
             onSelectAgent={selecionarAgenteNoMapa}
@@ -547,8 +674,8 @@ function App() {
               <label className="map-selection-visibility">
                 <input
                   type="checkbox"
-                  checked={filtrosAgentes.showOnMap}
-                  onChange={(event) => setFiltrosAgentes((atual) => ({ ...atual, showOnMap: event.target.checked }))}
+                  checked={exibirAgentesMapa}
+                  onChange={(event) => setExibirAgentesMapa(event.target.checked)}
                   aria-label="Exibir agentes no mapa"
                   title="Exibir agentes no mapa"
                 />
@@ -562,6 +689,25 @@ function App() {
                 <strong>{quantidadeAgentesSelecionadosNoMapa}</strong>
                 <span aria-hidden="true">/</span>
                 <span>{agentesMapa.length}</span>
+              </span>
+            </div>
+            <div className="map-selection-count-row">
+              <label className="map-selection-visibility">
+                <input
+                  type="checkbox"
+                  checked={exibirMarcadoresOcorrencias}
+                  onChange={(event) => setExibirMarcadoresOcorrencias(event.target.checked)}
+                  aria-label="Exibir marcadores de ocorrências no mapa"
+                  title="Exibir marcadores de ocorrências no mapa"
+                />
+                <span>Ocorrências</span>
+              </label>
+              <span
+                className="item-list-selection-count"
+                aria-label={`${ocorrenciasIncluidasMapa.length} ocorrências incluídas`}
+                title={`${ocorrenciasIncluidasMapa.length} ocorrências incluídas`}
+              >
+                <span>{ocorrenciasIncluidasMapa.length}</span>
               </span>
             </div>
           </div>
@@ -591,10 +737,17 @@ function App() {
           onToggleSelection={alternarSelecaoAgente}
         />
       </div>
-      <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : 'Informações do equipamento'} ref={painelDetalhes}>
+      <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : ocorrenciaDetalhes !== null ? 'Informações da ocorrência' : 'Informações do equipamento'} ref={painelDetalhes}>
         {detalhesAgenteId !== null
           ? <AgentDetails agente={agenteDetalhes} agentes={agentes} dark={tema === 'dark'} onDetailsReady={restaurarScrollDetalhes} onClose={() => setDetalhesAgenteId(null)} />
-          : <EquipmentDetails
+          : ocorrenciaDetalhes !== null
+            ? <OccurrenceDetails
+              occurrence={ocorrenciaDetalhes}
+              loading={carregandoOcorrencias}
+              error={erroOcorrencias}
+              onClose={() => setOcorrenciaDetalhes(null)}
+            />
+            : <EquipmentDetails
             ponto={pontoDetalhes}
             dataHora={dataHoraAplicada}
             agentes={agentes}

@@ -104,6 +104,42 @@ def health():
     return {"status": "ok", "database": bool(rows and rows[0]["ok"] == 1)}
 
 
+@app.get("/api/ocorrencias")
+def list_ocorrencias_mapa(
+    modo: str = "atual",
+    inicio: datetime | None = None,
+    fim: datetime | None = None,
+):
+    if modo not in ("atual", "periodo"):
+        raise HTTPException(status_code=422, detail="Modo de ocorrências inválido")
+    if modo == "periodo" and (inicio is None or fim is None):
+        raise HTTPException(status_code=422, detail="Informe a data inicial e final")
+    if inicio is not None and fim is not None and inicio > fim:
+        raise HTTPException(status_code=422, detail="A data inicial deve ser anterior à data final")
+
+    return fetch_all(
+        """
+        SELECT o.id_ocorrencia AS id, o.tipo, o.gravidade, o.status,
+               o.descricao, o.ocorrida_em,
+               CAST(l.latitude AS DOUBLE) AS latitude,
+               CAST(l.longitude AS DOUBLE) AS longitude,
+               l.logradouro, b.nome AS bairro, l.cidade, l.uf,
+               org.nome AS orgao_nome, e.numero_serie AS equipamento_nome
+        FROM ocorrencias o
+        JOIN localizacoes l ON l.id_localizacao = o.id_localizacao
+        JOIN bairros b ON b.id_bairro = l.id_bairro
+        JOIN orgaos org ON org.id_orgao = o.id_orgao
+        LEFT JOIN equipamentos e ON e.id_equipamento = o.id_equipamento
+        WHERE (
+            (%s = 'atual' AND o.status IN ('aberta', 'em_atendimento'))
+            OR (%s = 'periodo' AND o.ocorrida_em >= %s AND o.ocorrida_em <= %s)
+        )
+        ORDER BY o.ocorrida_em DESC, o.id_ocorrencia DESC
+        """,
+        (modo, modo, inicio, fim),
+    )
+
+
 @app.get("/api/agentes")
 def list_agentes(em: datetime | None = None):
     rows = fetch_all(

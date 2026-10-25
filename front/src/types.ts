@@ -138,6 +138,13 @@ export interface OcorrenciaEquipamento {
   uf: string | null;
 }
 
+export interface OcorrenciaMapa extends OcorrenciaEquipamento {
+  latitude: number;
+  longitude: number;
+  orgao_nome: string;
+  equipamento_nome: string | null;
+}
+
 export interface ManutencaoEquipamento {
   id: number;
   modalidade: 'preventiva' | 'corretiva';

@@ -22,6 +22,23 @@
 .situation-nao-instalado .equipment-state { background: #475569; }
 .situation-mau-funcionamento .equipment-state { background: #ea580c; }
 .agent-div-icon { background: transparent; border: 0; }
+.occurrence-div-icon { background: transparent; border: 0; }
+.occurrence-marker {
+  display: grid; width: 25px; height: 28px; box-sizing: border-box; place-items: center;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%); color: #fff;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .38));
+}
+.occurrence-marker > span {
+  display: grid; width: 100%; height: 100%; box-sizing: border-box; place-items: center;
+  padding-top: 8px; font: 800 13px/1 Arial, sans-serif;
+}
+.occurrence-marker.severity-baixa { background: var(--status-operational-text); }
+.occurrence-marker.severity-media { background: var(--status-maintenance-text); }
+.occurrence-marker.severity-alta { background: #ea580c; }
+.occurrence-marker.severity-critica { background: var(--status-stolen-text); }
+.occurrence-marker.is-selected {
+  filter: drop-shadow(0 0 3px var(--dsin-yellow)) drop-shadow(0 2px 3px rgba(0, 0, 0, .38));
+}
 .agent-marker {
   position: relative; display: grid; width: 28px; height: 28px; place-items: center;
   border: 2px solid var(--dsin-page); border-radius: 50%; background: var(--dsin-charcoal);

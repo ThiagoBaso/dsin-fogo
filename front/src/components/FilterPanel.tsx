@@ -4,6 +4,7 @@ import AgentFilters from './AgentFilters';
 import EquipmentAttributeFilters from './EquipmentAttributeFilters';
 
 type FilterOption = { id: number; label: string };
+type StringFilterOption = { id: string; label: string };
 
 type CheckboxGroupProps = {
   options: FilterOption[];
@@ -48,6 +49,25 @@ type FilterPanelProps = {
     value: string;
     onValueChange: (value: string) => void;
     maxValue: string;
+  };
+  occurrencePeriod: {
+    includeOnMap: boolean;
+    onIncludeOnMapChange: (enabled: boolean) => void;
+    mode: 'atual' | 'periodo';
+    onModeChange: (mode: 'atual' | 'periodo') => void;
+    start: string;
+    onStartChange: (value: string) => void;
+    end: string;
+    onEndChange: (value: string) => void;
+    maxValue: string;
+  };
+  occurrenceFilters: {
+    types: StringFilterOption[];
+    gravities: StringFilterOption[];
+    selectedTypes: string[] | null;
+    onTypesChange: (ids: string[] | null) => void;
+    selectedGravities: string[] | null;
+    onGravitiesChange: (ids: string[] | null) => void;
   };
   display: {
     onlySelected: boolean;
@@ -98,6 +118,58 @@ function CheckboxFilterGroup({
   );
 }
 
+function StringCheckboxFilterGroup({
+  title,
+  options,
+  selectedIds,
+  onChange,
+}: {
+  title: string;
+  options: StringFilterOption[];
+  selectedIds: string[] | null;
+  onChange: (ids: string[] | null) => void;
+}) {
+  if (options.length === 0) return null;
+
+  const allSelected = selectedIds === null || options.every((option) => selectedIds.includes(option.id));
+  const currentSelection = selectedIds === null
+    ? options.map((option) => option.id)
+    : selectedIds.filter((id) => options.some((option) => option.id === id));
+
+  function toggleAll(checked: boolean) {
+    onChange(checked ? null : []);
+  }
+
+  function toggleOption(id: string, checked: boolean) {
+    const next = checked
+      ? [...currentSelection, id]
+      : currentSelection.filter((item) => item !== id);
+    onChange(options.every((option) => next.includes(option.id)) ? null : next);
+  }
+
+  return (
+    <details className="equipment-filter-accordion equipment-occurrence-filter-group">
+      <summary>{title}</summary>
+      <div className="equipment-filter-options" role="group" aria-label={title}>
+        <label className="equipment-filter-option">
+          <input type="checkbox" checked={allSelected} onChange={(event) => toggleAll(event.target.checked)} />
+          <span>Todos</span>
+        </label>
+        {options.map((option) => (
+          <label className="equipment-filter-option" key={option.id}>
+            <input
+              type="checkbox"
+              checked={selectedIds === null || selectedIds.includes(option.id)}
+              onChange={(event) => toggleOption(option.id, event.target.checked)}
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 export default function FilterPanel({
   expanded,
   onExpandedChange,
@@ -108,6 +180,8 @@ export default function FilterPanel({
   attributes,
   position,
   period,
+  occurrencePeriod,
+  occurrenceFilters,
   display,
   onApply,
   onReset,
@@ -168,6 +242,7 @@ export default function FilterPanel({
                 </label>
               )}
             </section>
+            
             <CheckboxFilterGroup
               title="Tipo de equipamento"
               options={types.options}
@@ -186,6 +261,79 @@ export default function FilterPanel({
               roles={agents.roles}
               onChange={agents.onChange}
             />
+            <details className="equipment-filter-accordion equipment-occurrence-filters">
+              <summary>Ocorrências</summary>
+              <div className="equipment-occurrence-filter-content">
+                <label className="equipment-display-option">
+                  <input
+                    type="checkbox"
+                    checked={occurrencePeriod.includeOnMap}
+                    onChange={(event) => occurrencePeriod.onIncludeOnMapChange(event.target.checked)}
+                  />
+                  <span>Exibir ocorrências no mapa</span>
+                </label>
+                <StringCheckboxFilterGroup
+                  title="Tipo de ocorrência"
+                  options={occurrenceFilters.types}
+                  selectedIds={occurrenceFilters.selectedTypes}
+                  onChange={occurrenceFilters.onTypesChange}
+                />
+                <StringCheckboxFilterGroup
+                  title="Gravidade"
+                  options={occurrenceFilters.gravities}
+                  selectedIds={occurrenceFilters.selectedGravities}
+                  onChange={occurrenceFilters.onGravitiesChange}
+                />
+                <section className="equipment-time-filters" aria-label="Período das ocorrências">
+                  <h3>Período</h3>
+                  <label className="equipment-time-option">
+                    <input
+                      type="radio"
+                      name="modo-periodo-ocorrencias"
+                      value="atual"
+                      checked={occurrencePeriod.mode === 'atual'}
+                      onChange={() => occurrencePeriod.onModeChange('atual')}
+                    />
+                    <span>Atuais (abertas ou em atendimento)</span>
+                  </label>
+                  <label className="equipment-time-option">
+                    <input
+                      type="radio"
+                      name="modo-periodo-ocorrencias"
+                      value="periodo"
+                      checked={occurrencePeriod.mode === 'periodo'}
+                      onChange={() => occurrencePeriod.onModeChange('periodo')}
+                    />
+                    <span>Escolher período</span>
+                  </label>
+                  {occurrencePeriod.mode === 'periodo' && (
+                    <>
+                      <label className="equipment-location-control">
+                        <span>Data inicial</span>
+                        <input
+                          type="datetime-local"
+                          value={occurrencePeriod.start}
+                          max={occurrencePeriod.maxValue}
+                          required={occurrencePeriod.includeOnMap}
+                          onChange={(event) => occurrencePeriod.onStartChange(event.target.value)}
+                        />
+                      </label>
+                      <label className="equipment-location-control">
+                        <span>Data final</span>
+                        <input
+                          type="datetime-local"
+                          value={occurrencePeriod.end}
+                          max={occurrencePeriod.maxValue}
+                          min={occurrencePeriod.start}
+                          required={occurrencePeriod.includeOnMap}
+                          onChange={(event) => occurrencePeriod.onEndChange(event.target.value)}
+                        />
+                      </label>
+                    </>
+                  )}
+                </section>
+              </div>
+            </details>
             <details className="equipment-filter-accordion equipment-location-filters" aria-label="Filtros de localização">
               <summary>Localização</summary>
               <label className="equipment-location-control">

@@ -673,6 +673,12 @@
   accent-color: var(--dsin-yellow);
 }
 
+.equipment-occurrence-filter-content {
+  display: grid;
+  gap: 9px;
+  padding-top: 10px;
+}
+
 .equipment-location-control {
   display: grid;
   gap: 5px;

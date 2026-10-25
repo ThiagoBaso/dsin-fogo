@@ -5,6 +5,7 @@ import EquipmentMarkers from './map/EquipmentMarkers';
 import AgentMarkers from './map/AgentMarkers';
 import NeighborhoodLayer from './map/NeighborhoodLayer';
 import RoutesLayer from './map/RoutesLayer';
+import OccurrenceMarkers from './map/OccurrenceMarkers';
 import 'leaflet/dist/leaflet.css';
 import './Map.css';
 
@@ -34,6 +35,10 @@ export default function MapaMarilia({
   selecionadosIds = [],
   exibirContornoBairros = false,
   temaEscuro = false,
+  occurrences = [],
+  showOccurrences = true,
+  selectedOccurrenceId,
+  onSelectOccurrence,
 }) {
   return (
     <MapContainer
@@ -60,6 +65,13 @@ export default function MapaMarilia({
           selectedAgentId={selectedAgentId}
           selectedAgentIds={selectedAgentIds}
           onSelect={onSelectAgent}
+        />
+      )}
+      {showOccurrences && (
+        <OccurrenceMarkers
+          occurrences={occurrences}
+          selectedId={selectedOccurrenceId}
+          onSelect={onSelectOccurrence}
         />
       )}
     </MapContainer>
