@@ -26,6 +26,9 @@ Este arquivo define regras permanentes para agentes de IA que alteram o projeto 
 - Preserve os padrões de navegação e os layouts estabelecidos quando o pedido limitar a mudança a estilos, cores, bordas ou tipografia.
 - Não inclua bibliotecas de UI, CSS ou ícones sem necessidade demonstrável; prefira as dependências presentes no projeto.
 
+- Toda alteração no frontend deve atender tanto ao tema claro quanto ao tema escuro. Confira contraste, superfícies, textos, bordas e estados de interação nos dois temas.
+- Use os tokens de tema para cores de interface, evitando valores fixos que deixem componentes ilegíveis ou incoerentes em um dos temas.
+
 ## 4. Identidade visual da DSIN
 
 Referências de marca fornecidas até agora:

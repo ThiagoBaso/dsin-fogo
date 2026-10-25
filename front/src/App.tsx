@@ -37,6 +37,14 @@ function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
+function getStoredTheme(): 'light' | 'dark' {
+  try {
+    return window.localStorage.getItem('fogo-theme') === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
 function getNumeroSerie(ponto: Ponto) {
   const numeroSerie = typeof ponto.numero_serie === 'string' ? ponto.numero_serie.trim() : '';
   if (numeroSerie) return numeroSerie;
@@ -49,6 +57,7 @@ function getNumeroSerie(ponto: Ponto) {
 
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
+  const [tema, setTema] = useState<'light' | 'dark'>(getStoredTheme);
   const [buscaSerieMapa, setBuscaSerieMapa] = useState('');
   const [buscaEquipamentos, setBuscaEquipamentos] = useState('');
   const [buscaAgentes, setBuscaAgentes] = useState('');
@@ -90,6 +99,15 @@ function App() {
   const [dataHoraAplicada, setDataHoraAplicada] = useState<string | null>(null);
   const [painelExpandido, setPainelExpandido] = useState(true);
   const painelDetalhes = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = tema;
+    try {
+      window.localStorage.setItem('fogo-theme', tema);
+    } catch {
+      // O tema ainda funciona durante esta sessão se o armazenamento estiver indisponível.
+    }
+  }, [tema]);
 
   const opcoesLocalizacao = useMemo(() => {
     const locations = [...pontos, ...agentes];
@@ -443,6 +461,8 @@ function App() {
         <TopBarMap
           abaAtiva={abaAtiva}
           onChange={setAbaAtiva}
+          tema={tema}
+          onToggleTema={() => setTema((atual) => atual === 'dark' ? 'light' : 'dark')}
           busca={abaAtiva === 'mapa'
             ? buscaSerieMapa
             : abaAtiva === 'lista'
@@ -470,6 +490,7 @@ function App() {
             onSelectAgent={visualizarAgente}
             selecionadosIds={selecionadosIds}
             exibirContornoBairros={exibirContornoBairros}
+            temaEscuro={tema === 'dark'}
           />
         </div>
         {abaAtiva === 'lista' && (

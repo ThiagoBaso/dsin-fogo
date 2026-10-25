@@ -1,4 +1,7 @@
 .equipment-div-icon { background: transparent; border: 0; }
+.leaflet-tile-pane.map-theme-dark {
+  filter: invert(.88) hue-rotate(180deg) brightness(.84) contrast(.9) saturate(.62);
+}
 .equipment-marker {
   position: relative; display: grid; width: 38px; height: 38px; place-items: center;
   border: 2px solid #fff; border-radius: 50% 50% 50% 10%; background: #3c4548;
@@ -29,7 +32,7 @@
 .agent-marker-count {
   position: absolute; top: -7px; right: -8px; display: grid; min-width: 15px; height: 15px;
   box-sizing: border-box; place-items: center; padding: 0 3px; border: 1px solid var(--dsin-page);
-  border-radius: 999px; background: var(--dsin-yellow); color: var(--dsin-ink); font: 700 9px/1 Arial, sans-serif;
+  border-radius: 999px; background: var(--dsin-yellow); color: var(--dsin-on-yellow); font: 700 9px/1 Arial, sans-serif;
 }
 .agent-selector-popup .leaflet-popup-content { width: 188px; margin: 9px; }
 .agent-selector-popup .leaflet-popup-close-button { display: none; }
@@ -56,4 +59,27 @@
 }
 .leaflet-overlay-pane path.leaflet-interactive:focus {
   outline: none;
+}
+
+:root[data-theme='dark'] .leaflet-popup-content-wrapper,
+:root[data-theme='dark'] .leaflet-popup-tip,
+:root[data-theme='dark'] .leaflet-tooltip,
+:root[data-theme='dark'] .leaflet-control-zoom a,
+:root[data-theme='dark'] .leaflet-control-attribution {
+  border-color: var(--dsin-border);
+  background: var(--dsin-surface);
+  color: var(--dsin-ink);
+}
+
+:root[data-theme='dark'] .leaflet-control-attribution a {
+  color: var(--dsin-yellow);
+}
+
+:root[data-theme='dark'] .agent-marker {
+  border-color: var(--dsin-yellow);
+  color: var(--dsin-ink);
+}
+
+:root[data-theme='dark'] .neighborhood-boundary-tooltip {
+  background: var(--dsin-surface);
 }

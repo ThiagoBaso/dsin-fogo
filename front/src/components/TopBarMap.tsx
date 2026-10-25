@@ -5,9 +5,11 @@ interface TopBarMapProps {
     onChange: (aba: Aba) => void;
     busca: string;
     onBuscaChange: (busca: string) => void;
+    tema: 'light' | 'dark';
+    onToggleTema: () => void;
 }
 
-function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange }: TopBarMapProps) {
+function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange, tema, onToggleTema }: TopBarMapProps) {
     const isMapa = abaAtiva === 'mapa';
     const isLista = abaAtiva === 'lista';
     const searchLabel = isMapa
@@ -59,6 +61,26 @@ function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange }: TopBarMapProps)
                     onChange={(event) => onBuscaChange(event.target.value)}
                 />
             </label>
+            <button
+                type="button"
+                className="theme-toggle"
+                aria-label={`Mudar para o tema ${tema === 'dark' ? 'claro' : 'escuro'}`}
+                aria-pressed={tema === 'dark'}
+                title={`Mudar para o tema ${tema === 'dark' ? 'claro' : 'escuro'}`}
+                onClick={onToggleTema}
+            >
+                {tema === 'dark' ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4" />
+                        <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+                    </svg>
+                ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M20.9 13A8.5 8.5 0 0 1 11 3.1 8.5 8.5 0 1 0 20.9 13Z" />
+                    </svg>
+                )}
+                <span>{tema === 'dark' ? 'Claro' : 'Escuro'}</span>
+            </button>
         </div>
     )
 }

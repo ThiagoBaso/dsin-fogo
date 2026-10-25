@@ -1,4 +1,5 @@
-import { MapContainer, TileLayer } from 'react-leaflet';
+import { useEffect } from 'react';
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import MapResizeObserver from './map/MapResizeObserver';
 import EquipmentMarkers from './map/EquipmentMarkers';
 import AgentMarkers from './map/AgentMarkers';
@@ -8,6 +9,17 @@ import 'leaflet/dist/leaflet.css';
 import './Map.css';
 
 const initialMapCenter = [-22.217, -49.950];
+
+function MapTheme({ dark }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const tilePane = map.getPane('tilePane');
+    tilePane?.classList.toggle('map-theme-dark', dark);
+  }, [dark, map]);
+
+  return null;
+}
 
 export default function MapaMarilia({
   pontos,
@@ -20,6 +32,7 @@ export default function MapaMarilia({
   onSelectAgent,
   selecionadosIds = [],
   exibirContornoBairros = false,
+  temaEscuro = false,
 }) {
   return (
     <MapContainer
@@ -27,6 +40,7 @@ export default function MapaMarilia({
       zoom={13}
       style={{ height: '100%', width: '100%' }}
     >
+      <MapTheme dark={temaEscuro} />
       <MapResizeObserver ativo={ativo} />
       <TileLayer
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
