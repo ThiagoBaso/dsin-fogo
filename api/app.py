@@ -185,6 +185,8 @@ def list_equipamentos(em: datetime | None = None):
             SELECT e.id_equipamento AS id,
                    CONCAT(t.nome, ' ', e.numero_serie) AS nome,
                    e.numero_serie,
+                   e.modelo,
+                   o.nome AS orgao_nome, o.sigla AS orgao_sigla,
                    t.id_tipo AS tipo_id, t.nome AS tipo, t.mobilidade,
                    s.id_situacao AS situacao_id, s.nome AS situacao,
                    CAST(COALESCE(pos.latitude, l.latitude) AS DOUBLE) AS latitude,
@@ -198,6 +200,7 @@ def list_equipamentos(em: datetime | None = None):
                    CASE WHEN s.disponivel = 1 THEN 'ativo' ELSE 'inativo' END AS status
             FROM equipamentos e
             JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
+            JOIN orgaos o ON o.id_orgao = e.id_orgao
             LEFT JOIN historico_situacoes hs ON hs.id_historico = (
                 SELECT h.id_historico
                 FROM historico_situacoes h
@@ -231,6 +234,8 @@ def list_equipamentos(em: datetime | None = None):
         SELECT e.id_equipamento AS id,
                CONCAT(t.nome, ' ', e.numero_serie) AS nome,
                e.numero_serie,
+               e.modelo,
+               o.nome AS orgao_nome, o.sigla AS orgao_sigla,
                t.id_tipo AS tipo_id,
                t.nome AS tipo,
                t.mobilidade,
@@ -247,6 +252,7 @@ def list_equipamentos(em: datetime | None = None):
                CASE WHEN s.disponivel = 1 THEN 'ativo' ELSE 'inativo' END AS status
         FROM equipamentos e
         JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
+        JOIN orgaos o ON o.id_orgao = e.id_orgao
         JOIN situacoes_equipamento s ON s.id_situacao = e.id_situacao
         LEFT JOIN localizacoes l ON l.id_localizacao = e.id_localizacao
         LEFT JOIN bairros b ON b.id_bairro = l.id_bairro

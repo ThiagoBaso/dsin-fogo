@@ -32,10 +32,37 @@ function ItemList({
           {todosSelecionados ? 'Desmarcar tudo' : 'Selecionar tudo'}
         </button>
       </div>
+      <div className="item-list-columns" aria-hidden="true">
+        <span />
+        <span>Número de série</span>
+        <span>Responsável</span>
+        <span>Localização</span>
+        <span>Condição</span>
+      </div>
       <ul>
         {pontosVisiveis.map((ponto) => {
           const selecionado = selecionadosIds.includes(ponto.id);
           const emVisualizacao = detalhesId === ponto.id;
+          const serial = typeof ponto.numero_serie === 'string' ? ponto.numero_serie.trim() : '';
+          const nomePrefixo = `${ponto.tipo} `;
+          const serialLegado = ponto.nome.toLocaleLowerCase('pt-BR').startsWith(nomePrefixo.toLocaleLowerCase('pt-BR'))
+            ? ponto.nome.slice(nomePrefixo.length).trim()
+            : '';
+          const enderecoPrincipal = ponto.logradouro?.trim()
+            || ponto.bairro?.trim()
+            || [ponto.cidade, ponto.uf].filter(Boolean).join(' / ')
+            || 'Endereço não informado';
+          const enderecoSecundario = [
+            ponto.logradouro ? ponto.bairro : null,
+            ponto.logradouro && !ponto.bairro ? [ponto.cidade, ponto.uf].filter(Boolean).join(' / ') : null,
+          ].filter(Boolean).join(' · ');
+          const responsavel = ponto.orgao_sigla?.trim() || ponto.orgao_nome?.trim() || 'Órgão não informado';
+          const modelo = typeof ponto.modelo === 'string' && ponto.modelo.trim()
+            ? ponto.modelo.trim()
+            : 'Modelo não informado';
+          const situacaoInfo = equipmentSituations[ponto.situacao_id];
+          const situacao = situacaoInfo?.label || ponto.situacao;
+          const classeSituacao = situacaoInfo?.className || 'desconhecida';
           const classes = [selecionado ? 'selected' : '', emVisualizacao ? 'viewing' : '']
             .filter(Boolean)
             .join(' ');
@@ -57,9 +84,21 @@ function ItemList({
                   aria-current={emVisualizacao ? 'true' : undefined}
                   onClick={() => onVisualizar(ponto)}
                 >
-                  <strong>{ponto.nome}</strong>
-                  <p>Situação: {equipmentSituations[ponto.situacao_id]?.label || ponto.situacao}</p>
-                  <p>Coordenadas: {ponto.latitude}, {ponto.longitude}</p>
+                  <span className="item-column item-equipment">
+                    <strong className="item-primary-text">{serial || serialLegado || 'Série não informada'}</strong>
+                    <span className="item-secondary-text">{ponto.tipo}</span>
+                  </span>
+                  <span className="item-column item-responsible">
+                    <strong className="item-primary-text">{responsavel}</strong>
+                    <span className="item-secondary-text">{modelo}</span>
+                  </span>
+                  <span className="item-column item-location">
+                    <strong className="item-primary-text">{enderecoPrincipal}</strong>
+                    {enderecoSecundario && <span className="item-secondary-text">{enderecoSecundario}</span>}
+                  </span>
+                  <span className="item-column item-condition">
+                    <span className={`item-situation situation-${classeSituacao}`}>{situacao}</span>
+                  </span>
                 </button>
               </div>
             </li>

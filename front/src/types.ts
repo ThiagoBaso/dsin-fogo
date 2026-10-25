@@ -75,6 +75,9 @@ export interface Ponto {
   id: number;
   nome: string;
   numero_serie: string;
+  modelo: string;
+  orgao_nome: string;
+  orgao_sigla: string | null;
   tipo_id: number;
   tipo: string;
   mobilidade: 'fixo' | 'movel';

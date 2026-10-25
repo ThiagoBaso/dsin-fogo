@@ -27,6 +27,18 @@
   --dsin-danger-ink: #b91c1c;
   --dsin-border-strong: #bfc6c7;
   --dsin-scrollbar: #aeb7ba;
+  --status-operational-bg: #dcfce7;
+  --status-operational-text: #166534;
+  --status-inactive-bg: #e2e8f0;
+  --status-inactive-text: #475569;
+  --status-stolen-bg: #fee2e2;
+  --status-stolen-text: #991b1b;
+  --status-maintenance-bg: #fef3c7;
+  --status-maintenance-text: #854d0e;
+  --status-not-installed-bg: #dbeafe;
+  --status-not-installed-text: #1e40af;
+  --status-malfunction-bg: #ffedd5;
+  --status-malfunction-text: #9a3412;
 }
 
 :root[data-theme='dark'] {
@@ -56,6 +68,18 @@
   --dsin-danger-ink: #ffb4b4;
   --dsin-border-strong: #526168;
   --dsin-scrollbar: #526168;
+  --status-operational-bg: #123a27;
+  --status-operational-text: #86efac;
+  --status-inactive-bg: #334148;
+  --status-inactive-text: #cbd5e1;
+  --status-stolen-bg: #472127;
+  --status-stolen-text: #fca5a5;
+  --status-maintenance-bg: #45360d;
+  --status-maintenance-text: #fcd34d;
+  --status-not-installed-bg: #1f3453;
+  --status-not-installed-text: #93c5fd;
+  --status-malfunction-bg: #482919;
+  --status-malfunction-text: #fdba74;
 }
 
 body {
