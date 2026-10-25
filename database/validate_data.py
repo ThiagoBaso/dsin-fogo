@@ -92,9 +92,28 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
         checks.append((label, bool(ok), detail))
 
     required = {"equipamentos": 532, "agentes": 100, "localizacoes": 300, "viagens": 240,
-                "posicoes_equipamento": 28800, "manutencoes": 800, "ocorrencias": 1000, "alertas": 250}
+                "posicoes_equipamento": 28800, "manutencoes": 800, "alertas": 250}
     for table, minimum in required.items():
         check(f"{table} >= {minimum}", len(tables.get(table, [])) >= minimum, str(len(tables.get(table, []))))
+    occurrences = tables.get("ocorrencias", [])
+    check("exatamente 10000 ocorrencias", len(occurrences) == 10000, str(len(occurrences)))
+    occurrence_migration_path = seed_path.with_name("migrate_occurrences.sql")
+    migration_occurrences = []
+    if occurrence_migration_path.exists():
+        migration_sql = occurrence_migration_path.read_text(encoding="utf-8").replace(
+            "INSERT IGNORE INTO `ocorrencias`", "INSERT INTO `ocorrencias`"
+        )
+        for statement in _statements(migration_sql):
+            match = pattern.fullmatch(statement.strip())
+            if not match or match.group(1) != "ocorrencias":
+                continue
+            columns = re.findall(r"`([^`]+)`", match.group(2))
+            rows = _parse_value_list(match.group(3))
+            migration_occurrences.extend(dict(zip(columns, row)) for row in rows)
+    expected_migration_occurrences = [row for row in occurrences if row["id_ocorrencia"] > 1000]
+    check("migracao inclui ocorrencias historicas ausentes",
+          migration_occurrences == expected_migration_occurrences and len(migration_occurrences) == 9000,
+          f"{len(migration_occurrences)} registros na migracao; {len(expected_migration_occurrences)} esperados")
     eq = {r["id_equipamento"]: r for r in tables["equipamentos"]}
     types = {r["id_tipo"]: r for r in tables["tipos_equipamento"]}
     situation_counts = defaultdict(int)
@@ -231,6 +250,38 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     check("ao menos 3 ocorrencias por equipamento desses tipos",
           all(occurrences_per_equipment[eid] >= 3 for eid in service_ids),
           f"{sum(occurrences_per_equipment[eid] >= 3 for eid in service_ids)}/{len(service_ids)} equipamentos completos")
+    occurrence_dates = [datetime.fromisoformat(row["ocorrida_em"]) for row in occurrences]
+    check("periodo de ocorrencias desde 2024",
+          bool(occurrence_dates) and min(occurrence_dates) == datetime(2024, 1, 1)
+          and max(occurrence_dates) <= datetime.now(),
+          f"{min(occurrence_dates) if occurrence_dates else 'sem datas'} a {max(occurrence_dates) if occurrence_dates else 'sem datas'}")
+    current_occurrences = [row for row in occurrences if row["status"] in ("aberta", "em_atendimento")]
+    check("500 ocorrencias abertas ou em atendimento",
+          len(current_occurrences) == 500
+          and sum(row["status"] == "aberta" for row in current_occurrences) == 250
+          and sum(row["status"] == "em_atendimento" for row in current_occurrences) == 250,
+          f"{len(current_occurrences)} ativas; {sum(row['status'] == 'aberta' for row in current_occurrences)} abertas; {sum(row['status'] == 'em_atendimento' for row in current_occurrences)} em atendimento")
+    occurrence_locations = {row["id_localizacao"]: row for row in tables["localizacoes"]}
+    incidents_per_location = defaultdict(int)
+    severity_by_grid = defaultdict(list)
+    severity_score = {"baixa": 1, "media": 2, "alta": 3, "critica": 4}
+    for occurrence in occurrences:
+        incidents_per_location[occurrence["id_localizacao"]] += 1
+        place = occurrence_locations[occurrence["id_localizacao"]]
+        cell = (round(place["latitude"], 2), round(place["longitude"], 2))
+        severity_by_grid[cell].append(severity_score[occurrence["gravidade"]])
+    top_location_count = max(1, len(incidents_per_location) // 10)
+    top_location_share = sum(sorted(incidents_per_location.values(), reverse=True)[:top_location_count]) / max(1, len(occurrences))
+    check("concentracao geografica de ocorrencias",
+          top_location_share >= 0.35,
+          f"top {top_location_count} locais concentram {top_location_share:.1%} dos registros")
+    populated_grid_scores = [
+        sum(scores) / len(scores) for scores in severity_by_grid.values() if len(scores) >= 100
+    ]
+    severity_spread = max(populated_grid_scores, default=0) - min(populated_grid_scores, default=0)
+    check("gravidade varia entre areas geograficas",
+          len(populated_grid_scores) >= 3 and severity_spread >= 0.45,
+          f"{len(populated_grid_scores)} areas com 100+ eventos; amplitude media {severity_spread:.2f}/3")
     trips_per_equipment = defaultdict(int)
     for trip in trips.values():
         if trip["id_equipamento"] in service_ids:
@@ -419,7 +470,7 @@ def main() -> int:
     check("viagens ativas", "SELECT COUNT(*) FROM viagens WHERE situacao='em_andamento' AND fim_em IS NULL", lambda n: n >= 60, ">= 60")
     check("posições GPS", "SELECT COUNT(*) FROM posicoes_equipamento WHERE id_viagem IS NOT NULL", lambda n: n >= 28800, ">= 28800")
     check("manutenções", "SELECT COUNT(*) FROM manutencoes", lambda n: n >= 800, ">= 800")
-    check("ocorrências", "SELECT COUNT(*) FROM ocorrencias", lambda n: n >= 1000, ">= 1000")
+    check("ocorrências", "SELECT COUNT(*) FROM ocorrencias", lambda n: n >= 10000, ">= 10000")
     check("alertas", "SELECT COUNT(*) FROM alertas", lambda n: n >= 250, ">= 250")
     check("viagens com ao menos 120 posições", "SELECT COUNT(*) FROM (SELECT id_viagem FROM posicoes_equipamento WHERE id_viagem IS NOT NULL GROUP BY id_viagem HAVING COUNT(*) >= 120) q", lambda n: n >= 240, ">= 240 viagens")
     import osmnx as ox

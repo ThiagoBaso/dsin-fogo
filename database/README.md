@@ -6,7 +6,7 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 
 - `DER_FOGO.dbml`: modelo logico.
 - `schema.sql`: schema MySQL 8.0 / InnoDB / utf8mb4.
-- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql`, `migrate_agent_vehicle_shifts.sql`, `migrate_agent_coverage.sql` and `migrate_vehicle_coverage.sql`: idempotent upgrades for an existing Compose database volume.
+- `migrate_active_trips.sql`, `migrate_equipment_catalog.sql`, `migrate_location_addresses.sql`, `migrate_equipment_situations.sql`, `migrate_equipment_attributes.sql`, `migrate_agent_vehicle_shifts.sql`, `migrate_agent_coverage.sql`, `migrate_vehicle_coverage.sql` and `migrate_occurrences.sql`: idempotent upgrades for an existing Compose database volume.
 - `generate_data.py`: gera a massa SQL de demonstracao.
 - `generate_neighborhood_boundaries.py`: gera o GeoJSON de setores demonstrativos usando quarteiroes delimitados por ruas do OpenStreetMap.
 - `generate_routes.py`: cria e interpola rotas pela malha viaria OpenStreetMap de Marilia.
@@ -17,6 +17,8 @@ Schema de referencia para MySQL 8.0, baseado em `DER_FOGO.dbml`.
 O seed preserva os 500 equipamentos originais e inclui oito unidades de cada um dos quatro novos tipos moveis (532 equipamentos no total, 92 moveis). Cada novo cadastro tem localizacao distinta, atributos especificos, historico e ao menos tres ocorrencias e quatro viagens com posicoes GPS. O gerador cria tres viagens concluidas por equipamento movel e uma ativa quando ele esta a mais de 100 m da base. As rotas sao demonstrativas e usam a malha viaria OSM.
 
 A massa tambem inclui oito equipamentos ainda nao instalados e oito com mau funcionamento, com historico de situacao coerente.
+
+O seed gera exatamente 10.000 ocorrencias entre 1 de janeiro de 2024 e a data da geracao. Mantem 500 ocorrencias abertas ou em atendimento, para que a visao atual conserve uma quantidade semelhante a anterior. A distribuicao espacial e sintetica: cerca de 82% dos eventos aleatorios se concentram ao redor de sete pontos da malha viaria, com intensidades e perfis de gravidade/tipo diferentes; o restante compoe uma distribuicao de fundo. Esses agrupamentos servem para demonstrar variacao no mapa de calor e nao representam estatisticas oficiais de risco.
 
 Veículos e patinetes móveis recebem raios de cobertura de 100 a 300 metros; radares móveis ficam entre 100 e 240 metros. A cobertura é calculada ao redor da posição atual do equipamento (GPS mais recente, ou posição cadastrada quando não houver GPS). Agentes em turnos ativos ou programados com veículo recebem raios de atuação de 100 a 300 metros ao redor da posição exibida no mapa. Agentes sem veículo recebem raios locais de 20 a 60 metros ao redor da posição cadastrada. Os raios são armazenados em km e exibidos em metros nos detalhes. Esses valores são sintéticos para demonstração; a seed e as migrações usam valores reprodutíveis e atualizam valores gerados anteriores, preservando valores personalizados.
 
@@ -42,7 +44,7 @@ A primeira geracao requer acesso ao OpenStreetMap/Overpass para obter a malha, q
 
 O GeoJSON dos setores e gerado a partir dessa mesma malha viaria: quarteiroes fechados pelas ruas sao agrupados em 40 setores sinteticos. As divisorias internas seguem vias; o limite externo e um fecho aproximado. Os setores continuam ficticios e nao devem ser tratados como limites oficiais de bairros.
 
-O Docker Compose monta `schema.sql` e `seed.sql` para inicializar um banco vazio. Em um volume existente, `database-migrate` aplica de forma idempotente as migrações de viagens, catálogo, endereços, situações, atributos e turnos de agentes. A migração de atributos inclui o catálogo e valores sintéticos sem apagar equipamentos. A API aguarda as migrações. Não remova `fogo_mysql_data`, pois isso apagaria os dados.
+O Docker Compose monta `schema.sql` e `seed.sql` para inicializar um banco vazio. Em um volume existente, `database-migrate` aplica de forma idempotente as migrações de viagens, catálogo, endereços, situações, atributos e turnos de agentes. A migração `migrate_occurrences.sql` acrescenta os IDs históricos do seed que ainda não existem, sem substituir ocorrências já gravadas. A migração de atributos inclui o catálogo e valores sintéticos sem apagar equipamentos. A API aguarda as migrações. Não remova `fogo_mysql_data`, pois isso apagaria os dados.
 
 Para validar o seed offline, conferir as viagens ativas e verificar os limites geograficos, execute `py database\validate_data.py --seed-sql database\seed.sql`. Para validar uma base importada, configure `MYSQL_*` e execute `py database\validate_data.py`.
 

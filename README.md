@@ -26,7 +26,7 @@ Endereços padrão:
 
 O frontend busca os equipamentos pela API em `/api/equipamentos`; o Nginx encaminha as chamadas para o serviço `api`. A API também expõe `/api/viagens`, `/api/viagens/{id}/posicoes` e `/api/agentes`. A posição de um agente em turno acompanha o GPS do veículo vinculado.
 
-O MySQL executa `database/schema.sql` e `database/seed.sql` somente quando o volume `fogo_mysql_data` está vazio. `docker compose down` preserva o banco. Para não perder dados locais, não remova o volume sem intenção explícita.
+O MySQL executa `database/schema.sql` e `database/seed.sql` somente quando o volume `fogo_mysql_data` está vazio. Em volumes existentes, `database-migrate` aplica atualizações idempotentes, incluindo a inserção das ocorrências históricas que estiverem faltando, sem substituir os registros já existentes. `docker compose down` preserva o banco. Para não perder dados locais, não remova o volume sem intenção explícita.
 
 ## Validar dados
 

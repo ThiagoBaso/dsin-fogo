@@ -13,6 +13,12 @@ from generate_routes import load_graph, route_between_points, route_points
 HERE = Path(__file__).resolve().parent
 LOG = logging.getLogger("fogo.generate")
 NOW = datetime.now().replace(microsecond=0)
+OCCURRENCE_TOTAL = 10_000
+OCCURRENCE_ACTIVE_TOTAL = 500
+OCCURRENCE_HISTORY_START = datetime(2024, 1, 1)
+DEMO_MAP_CENTER = (-49.950, -22.217)  # same center as generate_neighborhood_boundaries.py
+DEMO_MAP_HALF_SPAN = 0.07
+OCCURRENCE_HOTSPOT_RADIUS_M = 2_500
 
 
 def q(value):
@@ -36,6 +42,102 @@ def insert(table, columns, rows, batch=500):
         values = ["(" + ", ".join(q(v) for v in row) + ")" for row in rows[offset:offset + batch]]
         statements.append(head + ",\n".join(values) + ";")
     return "\n".join(statements) + "\n"
+
+
+def occurrence_hotspots(locations):
+    """Choose reproducible road locations and uneven synthetic risk profiles."""
+    coords = {row[0]: (row[8], row[7]) for row in locations}
+    map_location_ids = [
+        location_id for location_id, (lon, lat) in coords.items()
+        if abs(lon - DEMO_MAP_CENTER[0]) <= DEMO_MAP_HALF_SPAN
+        and abs(lat - DEMO_MAP_CENTER[1]) <= DEMO_MAP_HALF_SPAN
+    ]
+    if not map_location_ids:
+        map_location_ids = list(coords)
+    unique_locations = list(dict.fromkeys(
+        (round(coords[location_id][0], 6), round(coords[location_id][1], 6), location_id)
+        for location_id in map_location_ids
+    ))
+    if not unique_locations:
+        raise RuntimeError("No locations available for occurrence generation")
+
+    center = (
+        sum(lon for lon, _lat, _location_id in unique_locations) / len(unique_locations),
+        sum(lat for _lon, lat, _location_id in unique_locations) / len(unique_locations),
+    )
+    dense_centers = [
+        row for row in unique_locations
+        if sum(
+            haversine_m((row[0], row[1]), coords[location_id]) <= OCCURRENCE_HOTSPOT_RADIUS_M
+            for location_id in map_location_ids
+        ) >= 20
+    ]
+    if len({(row[0], row[1]) for row in dense_centers}) < 7:
+        dense_centers = unique_locations
+    first = min(dense_centers, key=lambda row: haversine_m(center, (row[0], row[1])))
+    selected = [first]
+    selected_coordinates = {(first[0], first[1])}
+    while len(selected) < 7:
+        candidate = max(
+            (row for row in dense_centers if (row[0], row[1]) not in selected_coordinates),
+            key=lambda row: min(haversine_m((row[0], row[1]), (hotspot[0], hotspot[1])) for hotspot in selected),
+            default=None,
+        )
+        if candidate is None:
+            break
+        selected.append(candidate)
+        selected_coordinates.add((candidate[0], candidate[1]))
+
+    # Shares control how many events enter each hotspot; profiles make nearby
+    # areas differ in severity and occurrence type instead of looking uniform.
+    profiles = [
+        {"share": 0.25, "severity": [20, 38, 30, 12], "types": [40, 15, 25, 8, 12]},
+        {"share": 0.20, "severity": [6, 19, 43, 32], "types": [20, 14, 8, 36, 22]},
+        {"share": 0.17, "severity": [47, 34, 16, 3], "types": [35, 18, 22, 9, 16]},
+        {"share": 0.14, "severity": [14, 35, 37, 14], "types": [28, 18, 18, 18, 18]},
+        {"share": 0.10, "severity": [56, 31, 11, 2], "types": [38, 18, 21, 8, 15]},
+        {"share": 0.08, "severity": [28, 43, 24, 5], "types": [31, 17, 20, 13, 19]},
+        {"share": 0.06, "severity": [40, 43, 15, 2], "types": [34, 20, 19, 11, 16]},
+    ][:len(selected)]
+    share_total = sum(profile["share"] for profile in profiles)
+    for profile in profiles:
+        profile["share"] /= share_total
+
+    hotspot_candidates = []
+    for lon, lat, _location_id in selected:
+        nearby = []
+        for location_id in map_location_ids:
+            distance = haversine_m((lon, lat), coords[location_id])
+            if distance <= OCCURRENCE_HOTSPOT_RADIUS_M:
+                nearby.append((location_id, math.exp(-0.5 * (distance / 900) ** 2)))
+        if not nearby:
+            nearest = min(coords, key=lambda location_id: haversine_m((lon, lat), coords[location_id]))
+            nearby = [(nearest, 1.0)]
+        hotspot_candidates.append(nearby)
+
+    return coords, map_location_ids, selected, profiles, hotspot_candidates
+
+
+def random_datetime(rng, start, end):
+    span_seconds = max(0, int((end - start).total_seconds()))
+    return start + timedelta(seconds=rng.randint(0, span_seconds))
+
+
+def occurrence_migration_sql(occurrences):
+    """Append missing historical occurrence IDs to databases with a persistent volume."""
+    new_rows = [row for row in occurrences if row[0] > 1_000]
+    rows_sql = insert(
+        "ocorrencias",
+        ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em"],
+        new_rows,
+    ).replace("INSERT INTO `ocorrencias`", "INSERT IGNORE INTO `ocorrencias`")
+    return (
+        "-- Idempotently add the historical demo occurrences missing from persistent volumes.\n"
+        "-- New databases already receive these rows from seed.sql.\n"
+        "START TRANSACTION;\n"
+        + rows_sql
+        + "COMMIT;\n"
+    )
 
 
 def migration_sql(active_trips, active_positions):
@@ -666,27 +768,96 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     occurrences = []
     equipment_by_id = {row[0]: row for row in equipment_rows}
     priority_equipment_ids = [i for i, tid in equipment_type.items() if tid in (12, 13, 14, 15)]
-    for equip_id in priority_equipment_ids:
-        equipment = equipment_by_id[equip_id]
-        for _ in range(3):
-            occurrence_id = len(occurrences) + 1
-            occurred = NOW - timedelta(days=rng.randint(1, 365), hours=rng.randint(0, 23), minutes=rng.randint(0, 59))
-            occurrences.append((occurrence_id, equipment[3], equipment[2], equip_id,
-                                rng.choice(["tr\u00e2nsito", "falha de equipamento", "estacionamento", "seguran\u00e7a", "obstru\u00e7\u00e3o"]),
-                                rng.choices(["baixa", "media", "alta", "critica"], [35, 40, 20, 5])[0],
-                                rng.choice(["aberta", "em_atendimento", "resolvida", "cancelada"]),
-                                "Evento fict\u00edcio vinculado ao equipamento para demonstra\u00e7\u00e3o.", occurred))
-    for _ in range(1000 - len(occurrences)):
+    occurrence_types = ["tr\u00e2nsito", "falha de equipamento", "estacionamento", "seguran\u00e7a", "obstru\u00e7\u00e3o"]
+    severities = ["baixa", "media", "alta", "critica"]
+    background_profile = {"severity": [38, 42, 17, 3], "types": [34, 19, 20, 12, 15]}
+    occurrence_coords, map_location_ids, hotspots, hotspot_profiles, hotspot_candidates = occurrence_hotspots(locations)
+    active_start = max(OCCURRENCE_HISTORY_START, NOW - timedelta(days=60))
+    active_status_index = 0
+
+    def context_for_random_occurrence():
+        if rng.random() < 0.18:
+            location_id = rng.choice(map_location_ids)
+            return location_id, background_profile
+        hotspot_index = rng.choices(
+            range(len(hotspot_profiles)),
+            weights=[profile["share"] for profile in hotspot_profiles],
+            k=1,
+        )[0]
+        candidates = hotspot_candidates[hotspot_index]
+        location_id = rng.choices(
+            [candidate[0] for candidate in candidates],
+            weights=[candidate[1] for candidate in candidates],
+            k=1,
+        )[0]
+        return location_id, hotspot_profiles[hotspot_index]
+
+    def context_for_location(location_id):
+        lon_lat = occurrence_coords[location_id]
+        nearest = min(
+            range(len(hotspots)),
+            key=lambda index: haversine_m(lon_lat, (hotspots[index][0], hotspots[index][1])),
+        )
+        return hotspot_profiles[nearest]
+
+    def add_occurrence(location_id, org_id, equip_id, active, description, fixed_location=False,
+                       force_start=False, force_now=False):
+        nonlocal active_status_index
         occurrence_id = len(occurrences) + 1
-        hour = rng.choices(range(24), [1,1,1,1,1,2,3,5,7,7,6,5,5,5,5,5,6,8,9,9,7,5,3,2])[0]
-        day = rng.randint(0, 365)
-        occurred = NOW - timedelta(days=day, hours=hour, minutes=rng.randint(0, 59))
+        if fixed_location:
+            profile = context_for_location(location_id)
+        else:
+            location_id, profile = context_for_random_occurrence()
+        status = (
+            ("aberta" if active_status_index % 2 == 0 else "em_atendimento")
+            if active else rng.choices(["resolvida", "cancelada"], [86, 14])[0]
+        )
+        if active:
+            active_status_index += 1
+            occurred = NOW if force_now else random_datetime(rng, active_start, NOW)
+        else:
+            occurred = OCCURRENCE_HISTORY_START if force_start else random_datetime(rng, OCCURRENCE_HISTORY_START, NOW)
+        if force_now:
+            occurred = NOW
+        occurrences.append((
+            occurrence_id,
+            location_id,
+            org_id,
+            equip_id,
+            rng.choices(occurrence_types, profile["types"], k=1)[0],
+            rng.choices(severities, profile["severity"], k=1)[0],
+            status,
+            description,
+            occurred,
+        ))
+
+    for equipment_index, equip_id in enumerate(priority_equipment_ids):
+        equipment = equipment_by_id[equip_id]
+        for equipment_occurrence_index in range(3):
+            is_active = equipment_occurrence_index == 0 or (equipment_occurrence_index == 1 and equipment_index < 16)
+            add_occurrence(
+                equipment[3], equipment[2], equip_id, is_active,
+                "Evento fict\u00edcio vinculado ao equipamento para demonstra\u00e7\u00e3o.",
+                fixed_location=True,
+                force_start=(len(occurrences) == 2),
+            )
+
+    remaining_active = OCCURRENCE_ACTIVE_TOTAL - active_status_index
+    for _ in range(remaining_active):
         equip_id = rng.choice(list(equipment_type))
-        occurrences.append((occurrence_id, rng.randint(1, 350), rng.randint(1, 4), equip_id,
-                            rng.choice(["tr\u00e2nsito", "falha de equipamento", "estacionamento", "seguran\u00e7a", "obstru\u00e7\u00e3o"]),
-                            rng.choices(["baixa", "media", "alta", "critica"], [35, 40, 20, 5])[0],
-                            rng.choice(["aberta", "em_atendimento", "resolvida", "cancelada"]),
-                            "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.", occurred))
+        add_occurrence(
+            0, rng.randint(1, 4), equip_id, True,
+            "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.",
+            force_now=(len(occurrences) == len(priority_equipment_ids) * 3),
+        )
+
+    remaining_historical = OCCURRENCE_TOTAL - len(occurrences)
+    for _ in range(remaining_historical):
+        equip_id = rng.choice(list(equipment_type))
+        add_occurrence(
+            0, rng.randint(1, 4), equip_id, False,
+            "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.",
+        )
     add("ocorrencias", ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em"], occurrences)
     alerts = []
     for i in range(1, 251):
@@ -707,6 +878,10 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     temp_out = out.with_suffix(out.suffix + ".tmp")
     temp_out.write_text("\n".join(sql), encoding="utf-8")
     temp_out.replace(out)
+    occurrence_migration_path = out.with_name("migrate_occurrences.sql")
+    occurrence_migration_temp = occurrence_migration_path.with_suffix(occurrence_migration_path.suffix + ".tmp")
+    occurrence_migration_temp.write_text(occurrence_migration_sql(occurrences), encoding="utf-8")
+    occurrence_migration_temp.replace(occurrence_migration_path)
     active_trip_rows = [row for row in trip_rows if row[5] == "em_andamento"]
     active_trip_ids = {row[0] for row in active_trip_rows}
     active_position_rows = [
