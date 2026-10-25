@@ -30,7 +30,7 @@ function groupAgentsByVehicle(agents) {
   return Array.from(groups.values());
 }
 
-export default function AgentMarkers({ agents, selectedAgentId, onSelect }) {
+export default function AgentMarkers({ agents, selectedAgentId, selectedAgentIds = [], onSelect }) {
   const selectorOpen = useRef(false);
   useMapEvents({
     popupopen: (event) => {
@@ -52,12 +52,13 @@ export default function AgentMarkers({ agents, selectedAgentId, onSelect }) {
   return groupAgentsByVehicle(agents).map((crew) => {
     const representative = crew[0];
     const selectedAgent = crew.find((agent) => agent.id === selectedAgentId) ?? representative;
+    const crewSelected = crew.some((agent) => selectedAgentIds.includes(agent.id));
     const vehicleTitle = representative.veiculo_tipo || 'Agente sem veículo vinculado';
     return (
       <Marker
         key={representative.veiculo_id ?? `agent-${representative.id}`}
         position={[representative.latitude, representative.longitude]}
-        icon={createAgentIcon(crew.length, crew.some((agent) => agent.id === selectedAgentId))}
+        icon={createAgentIcon(crew.length, crewSelected)}
         zIndexOffset={400}
         eventHandlers={{ click: () => onSelect(selectedAgent) }}
       >

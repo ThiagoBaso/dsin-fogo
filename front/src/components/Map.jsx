@@ -29,6 +29,7 @@ export default function MapaMarilia({
   agents = [],
   showAgents = false,
   selectedAgentId = 0,
+  selectedAgentIds = [],
   onSelectAgent,
   selecionadosIds = [],
   exibirContornoBairros = false,
@@ -54,7 +55,12 @@ export default function MapaMarilia({
         onSelecionar={onSelecionar}
       />
       {showAgents && (
-        <AgentMarkers agents={agents} selectedAgentId={selectedAgentId} onSelect={onSelectAgent} />
+        <AgentMarkers
+          agents={agents}
+          selectedAgentId={selectedAgentId}
+          selectedAgentIds={selectedAgentIds}
+          onSelect={onSelectAgent}
+        />
       )}
     </MapContainer>
   );

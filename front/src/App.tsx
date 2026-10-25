@@ -80,6 +80,7 @@ function App() {
   const [atributosSelecionados, setAtributosSelecionados] = useState<AttributeFilterState>({});
   const [atributosAplicados, setAtributosAplicados] = useState<AttributeFilterState>({});
   const [selecionadosIds, setSelecionadosIds] = useState<number[]>([]);
+  const [agentesSelecionadosIds, setAgentesSelecionadosIds] = useState<number[]>([]);
   const [detalhesId, setDetalhesId] = useState<number | null>(null);
   const [detalhesAgenteId, setDetalhesAgenteId] = useState<number | null>(null);
   const [filtrosAgentes, setFiltrosAgentes] = useState<AgentFilterState>({
@@ -265,6 +266,17 @@ function App() {
     setDetalhesId(null);
     setDetalhesAgenteId(agente.id);
     painelDetalhes.current?.scrollTo({ top: 0 });
+  }
+
+  function selecionarAgenteNoMapa(agente: Agente) {
+    setAgentesSelecionadosIds((ids) => ids.includes(agente.id) ? ids : [...ids, agente.id]);
+    visualizarAgente(agente);
+  }
+
+  function alternarSelecaoAgente(agenteId: number) {
+    setAgentesSelecionadosIds((ids) => ids.includes(agenteId)
+      ? ids.filter((id) => id !== agenteId)
+      : [...ids, agenteId]);
   }
 
   function selecionarNoMapa(ponto: Ponto) {
@@ -487,36 +499,37 @@ function App() {
             agents={agentesMapa}
             showAgents={filtrosAgentes.showOnMap}
             selectedAgentId={detalhesAgenteId ?? 0}
-            onSelectAgent={visualizarAgente}
+            selectedAgentIds={agentesSelecionadosIds}
+            onSelectAgent={selecionarAgenteNoMapa}
             selecionadosIds={selecionadosIds}
             exibirContornoBairros={exibirContornoBairros}
             temaEscuro={tema === 'dark'}
           />
         </div>
-        {abaAtiva === 'lista' && (
-          <ItemList
-            pontos={equipamentosNaLista}
-            selecionadosIds={selecionadosIds}
-            detalhesId={detalhesId}
-            onVisualizar={visualizarEquipamento}
-            onAlternarSelecao={alternarSelecao}
-            onAlternarTodos={(selecionar, idsVisiveis) => {
-              if (selecionar) setPermitirMultisselecao(true);
-              setSelecionadosIds((selecionados) =>
-                selecionar
-                  ? selecionados.filter((id) => !idsVisiveis.includes(id)).concat(idsVisiveis)
-                  : selecionados.filter((id) => !idsVisiveis.includes(id)),
-              );
-            }}
-          />
-        )}
-        {abaAtiva === 'agentes' && (
-          <AgentList
-            agents={agentesNaLista}
-            selectedAgentId={detalhesAgenteId}
-            onSelect={visualizarAgente}
-          />
-        )}
+        <ItemList
+          visible={abaAtiva === 'lista'}
+          pontos={equipamentosNaLista}
+          selecionadosIds={selecionadosIds}
+          detalhesId={detalhesId}
+          onVisualizar={visualizarEquipamento}
+          onAlternarSelecao={alternarSelecao}
+          onAlternarTodos={(selecionar, idsVisiveis) => {
+            if (selecionar) setPermitirMultisselecao(true);
+            setSelecionadosIds((selecionados) =>
+              selecionar
+                ? selecionados.filter((id) => !idsVisiveis.includes(id)).concat(idsVisiveis)
+                : selecionados.filter((id) => !idsVisiveis.includes(id)),
+            );
+          }}
+        />
+        <AgentList
+          visible={abaAtiva === 'agentes'}
+          agents={agentesNaLista}
+          selectedAgentId={detalhesAgenteId}
+          selectedAgentIds={agentesSelecionadosIds}
+          onSelect={visualizarAgente}
+          onToggleSelection={alternarSelecaoAgente}
+        />
       </div>
       <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : 'Informações do equipamento'} ref={painelDetalhes}>
         {detalhesAgenteId !== null

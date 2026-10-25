@@ -8,6 +8,7 @@ function ItemList({
   onVisualizar,
   onAlternarSelecao,
   onAlternarTodos,
+  visible,
 }: {
   pontos: Ponto[];
   selecionadosIds: number[];
@@ -15,13 +16,14 @@ function ItemList({
   onVisualizar: (ponto: Ponto) => void;
   onAlternarSelecao: (pontoId: number) => void;
   onAlternarTodos: (selecionar: boolean, idsVisiveis: number[]) => void;
+  visible: boolean;
 }) {
   const pontosVisiveis = pontos;
   const todosSelecionados = pontosVisiveis.length > 0
     && pontosVisiveis.every((ponto) => selecionadosIds.includes(ponto.id));
 
   return (
-    <section className="item-list" aria-label="Lista de itens">
+    <section className="item-list equipment-list" aria-label="Lista de itens" hidden={!visible}>
       <div className="item-list-header">
         <h2>Itens</h2>
         <button

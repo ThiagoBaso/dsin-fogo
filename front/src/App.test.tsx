@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
 
 jest.mock('./components/Map', () => ({
@@ -26,4 +26,30 @@ test('renders the filter panel and view switch', async () => {
   expect(screen.getByRole('button', { name: 'Mapa' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Lista' })).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+});
+
+test('preserves each list scroll position while switching views', async () => {
+  const { container } = render(<App />);
+  await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+  const equipmentList = container.querySelector('.equipment-list') as HTMLElement;
+  const agentList = container.querySelector('.agent-list') as HTMLElement;
+
+  fireEvent.click(screen.getByRole('button', { name: 'Lista' }));
+  equipmentList.scrollTop = 240;
+
+  fireEvent.click(screen.getByRole('button', { name: 'Lista de agentes' }));
+  expect(equipmentList).toHaveAttribute('hidden');
+  expect(equipmentList.scrollTop).toBe(240);
+  agentList.scrollTop = 120;
+
+  fireEvent.click(screen.getByRole('button', { name: 'Mapa' }));
+  expect(agentList).toHaveAttribute('hidden');
+  expect(agentList.scrollTop).toBe(120);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Lista' }));
+  expect(equipmentList.scrollTop).toBe(240);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Lista de agentes' }));
+  expect(agentList.scrollTop).toBe(120);
 });
