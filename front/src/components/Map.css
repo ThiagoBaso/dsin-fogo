@@ -40,11 +40,14 @@
 }
 .map-heat-legend > div { display: flex; justify-content: space-between; }
 .map-coverage-active .equipment-marker,
-.map-coverage-active .agent-marker { opacity: .45; }
+.map-coverage-active .agent-marker,
+.map-coverage-active .occurrence-marker { opacity: .45; }
 .map-coverage-active .equipment-marker.is-selected,
 .map-coverage-active .agent-marker.is-selected,
+.map-coverage-active .occurrence-marker.is-selected,
 .map-coverage-active .equipment-div-icon:is(:hover, :focus) .equipment-marker,
-.map-coverage-active .agent-div-icon:is(:hover, :focus) .agent-marker { opacity: 1; }
+.map-coverage-active .agent-div-icon:is(:hover, :focus) .agent-marker,
+.map-coverage-active .occurrence-div-icon:is(:hover, :focus) .occurrence-marker { opacity: 1; }
 .leaflet-tile-pane.map-theme-dark {
   filter: invert(.88) hue-rotate(180deg) brightness(.84) contrast(.9) saturate(.62);
 }
@@ -70,18 +73,19 @@
 .agent-div-icon { background: transparent; border: 0; }
 .occurrence-div-icon { background: transparent; border: 0; }
 .occurrence-marker {
-  display: grid; width: 25px; height: 28px; box-sizing: border-box; place-items: center;
+  display: grid; width: 22px; height: 25px; box-sizing: border-box; place-items: center;
   clip-path: polygon(50% 0, 100% 100%, 0 100%); color: #fff;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .38));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .38));
 }
 .occurrence-marker > span {
   display: grid; width: 100%; height: 100%; box-sizing: border-box; place-items: center;
-  padding-top: 8px; font: 800 13px/1 Arial, sans-serif;
+  padding-top: 7px; font: 800 12px/1 Arial, sans-serif;
 }
-.occurrence-marker.severity-baixa { background: var(--status-operational-text); }
-.occurrence-marker.severity-media { background: var(--status-maintenance-text); }
-.occurrence-marker.severity-alta { background: #ea580c; }
-.occurrence-marker.severity-critica { background: var(--status-stolen-text); }
+.occurrence-marker.severity-baixa { background: var(--occurrence-map-low); }
+.occurrence-marker.severity-media { background: var(--occurrence-map-medium); }
+.occurrence-marker.severity-alta { background: var(--occurrence-map-high); }
+.occurrence-marker.severity-critica { background: var(--occurrence-map-critical); }
+:root[data-theme='dark'] .occurrence-marker.severity-media { color: #1e2b3a; }
 .occurrence-marker.is-selected {
   filter: drop-shadow(0 0 3px var(--dsin-yellow)) drop-shadow(0 2px 3px rgba(0, 0, 0, .38));
 }

@@ -39,6 +39,10 @@
   --status-not-installed-text: #1e40af;
   --status-malfunction-bg: #ffedd5;
   --status-malfunction-text: #9a3412;
+  --occurrence-map-low: var(--status-operational-text);
+  --occurrence-map-medium: var(--status-maintenance-text);
+  --occurrence-map-high: #ea580c;
+  --occurrence-map-critical: var(--status-stolen-text);
 }
 
 :root[data-theme='dark'] {
@@ -80,6 +84,10 @@
   --status-not-installed-text: #93c5fd;
   --status-malfunction-bg: #482919;
   --status-malfunction-text: #fdba74;
+  --occurrence-map-low: #19814a;
+  --occurrence-map-medium: #c19413;
+  --occurrence-map-high: #b85017;
+  --occurrence-map-critical: #b83b42;
 }
 
 body {

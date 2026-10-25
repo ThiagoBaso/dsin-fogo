@@ -251,6 +251,14 @@ function App() {
       return { ...ponto, latitude, longitude };
     });
   }, [pontos, tiposAplicados, situacoesAplicadas, localizacaoAplicada, atributosAplicados, posicaoMovel]);
+  useEffect(() => {
+    const pontosVisiveisIds = new Set(pontosFiltrados.map((ponto) => ponto.id));
+    setSelecionadosIds((selecionados) => {
+      const restantes = selecionados.filter((id) => pontosVisiveisIds.has(id));
+      return restantes.length === selecionados.length ? selecionados : restantes;
+    });
+    setDetalhesId((id) => id !== null && !pontosVisiveisIds.has(id) ? null : id);
+  }, [pontosFiltrados]);
   const pontosMapa = useMemo(() => {
     const equipamentosExibidos = exibirApenasSelecionados
       ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
@@ -348,10 +356,14 @@ function App() {
   }
 
   function selecionarNoMapa(ponto: Ponto) {
+    if (selecionadosIds.includes(ponto.id)) {
+      setSelecionadosIds((selecionados) => selecionados.filter((id) => id !== ponto.id));
+      return;
+    }
     visualizarEquipamento(ponto);
     setSelecionadosIds((selecionados) => {
       if (!permitirMultisselecao) return [ponto.id];
-      return selecionados.includes(ponto.id) ? selecionados : [...selecionados, ponto.id];
+      return [...selecionados, ponto.id];
     });
   }
 

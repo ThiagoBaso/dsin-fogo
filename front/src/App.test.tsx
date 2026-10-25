@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from './App';
 import Map from './components/Map';
 import type { Agente, Ponto } from './types';
@@ -77,6 +77,71 @@ test('includes agents in coverage only through filters, while hiding markers pre
   fireEvent.click(filter);
   expect(mapProps().coverageSources).toHaveLength(1);
   expect(mapProps().agents).toHaveLength(0);
+});
+
+test('clicking a selected vehicle marker deselects it and removes its route', async () => {
+  const vehicle = {
+    id: 9, nome: 'Viatura DEMO-00009', numero_serie: 'DEMO-00009', modelo: 'Modelo-01',
+    orgao_nome: 'Polícia Militar', orgao_sigla: 'PM', tipo_id: 9, tipo: 'Viatura policial', mobilidade: 'movel',
+    situacao_id: 1, situacao: 'operacional', latitude: -22.217, longitude: -49.95,
+    latitude_fixa: -22.217, longitude_fixa: -49.95, latitude_gps: -22.217, longitude_gps: -49.95,
+    logradouro: null, referencia: null, bairro: null, regiao: null, cidade: null, uf: 'SP', cep: null,
+    status: 'ativo', atributos: [],
+  } as Ponto;
+  const route = {
+    id: 1, id_equipamento: vehicle.id, numero_serie: vehicle.numero_serie, inicio_em: '2026-01-01T08:00:00',
+    fim_em: null, distancia_m: 1200, situacao: 'em_andamento',
+    posicoes: [{ latitude: -22.217, longitude: -49.95, registrado_em: '2026-01-01T08:00:00' }],
+  };
+  (fetch as jest.Mock).mockImplementation((input: string) => {
+    const url = String(input);
+    const data = url.endsWith('/api/equipamentos') ? [vehicle]
+      : url.includes('/api/viagens/rotas-ativas') ? [route]
+        : url.includes(`/api/equipamentos/${vehicle.id}`) ? vehicle : [];
+    return Promise.resolve({ ok: true, json: async () => data });
+  });
+  const mapProps = () => (Map as jest.Mock).mock.calls.slice(-1)[0][0];
+  const { container } = render(<App />);
+  await waitFor(() => expect(mapProps().pontos).toHaveLength(0));
+
+  const typeFilters = within(container.querySelector('[role="group"][aria-label="Tipo de equipamento"]') as HTMLElement);
+  fireEvent.click(typeFilters.getByLabelText('Radar fixo'));
+  fireEvent.click(typeFilters.getByLabelText('Viatura policial'));
+  fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+  await waitFor(() => expect(mapProps().pontos).toEqual([vehicle]));
+
+  act(() => mapProps().onSelecionar(vehicle));
+  await waitFor(() => expect(mapProps().rotas).toEqual([route]));
+  expect(mapProps().selecionadosIds).toEqual([vehicle.id]);
+
+  act(() => mapProps().onSelecionar(vehicle));
+  await waitFor(() => expect(mapProps().rotas).toEqual([]));
+  expect(mapProps().selecionadosIds).toEqual([]);
+});
+
+test('applying filters removes a selected item that is no longer visible', async () => {
+  const equipment = {
+    id: 1, nome: 'Radar', numero_serie: 'DEMO-1', tipo_id: 1, situacao_id: 1, mobilidade: 'fixo',
+    latitude: -22.217, longitude: -49.95,
+    atributos: [{ id: 1, nome: 'raio_cobertura_km', tipo_valor: 'numero', unidade: 'km', valor: 0.2 }],
+  } as Ponto;
+  (fetch as jest.Mock).mockImplementation((input: string) => Promise.resolve({
+    ok: true,
+    json: async () => String(input).endsWith('/api/equipamentos') ? [equipment] : [],
+  }));
+  const mapProps = () => (Map as jest.Mock).mock.calls.slice(-1)[0][0];
+  const { container } = render(<App />);
+  await waitFor(() => expect(mapProps().pontos).toEqual([equipment]));
+  act(() => mapProps().onSelecionar(equipment));
+  await waitFor(() => expect(mapProps().selecionadosIds).toEqual([equipment.id]));
+
+  const typeFilters = within(container.querySelector('[role="group"][aria-label="Tipo de equipamento"]') as HTMLElement);
+  fireEvent.click(typeFilters.getByLabelText('Radar fixo'));
+  fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+
+  await waitFor(() => expect(mapProps().selecionadosIds).toEqual([]));
+  expect(mapProps().pontos).toEqual([]);
+  expect(screen.getByText('Selecione um equipamento no mapa ou na lista para ver os detalhes.')).toBeInTheDocument();
 });
 
 test('preserves each list scroll position while switching views', async () => {

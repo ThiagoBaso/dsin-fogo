@@ -9,9 +9,9 @@ function getIcon(selected, severity) {
     icons.set(key, L.divIcon({
       className: 'occurrence-div-icon',
       html: `<span class="occurrence-marker severity-${severity}${selected ? ' is-selected' : ''}" aria-hidden="true"><span>!</span></span>`,
-      iconSize: [28, 32],
-      iconAnchor: [14, 28],
-      popupAnchor: [0, -26],
+      iconSize: [24, 28],
+      iconAnchor: [12, 25],
+      popupAnchor: [0, -23],
     }));
   }
   return icons.get(key);

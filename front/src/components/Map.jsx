@@ -55,7 +55,7 @@ export default function MapaMarilia({
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="&copy; OpenStreetMap contributors"
       />
-      <NeighborhoodLayer enabled={exibirContornoBairros} />
+      <NeighborhoodLayer enabled={exibirContornoBairros} dark={temaEscuro} />
       <RoutesLayer rotas={rotas} />
       <CoverageHeatLayer
         enabled={coverageHeatEnabled}

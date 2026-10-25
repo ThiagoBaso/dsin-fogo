@@ -11,7 +11,7 @@ function configureNeighborhoodTooltip(feature, layer, selectNeighborhood) {
   layer.on('click', () => selectNeighborhood(feature.properties.id));
 }
 
-export default function NeighborhoodLayer({ enabled }) {
+export default function NeighborhoodLayer({ enabled, dark = false }) {
   const [setorSelecionadoId, setSetorSelecionadoId] = useState(null);
   if (!enabled) return null;
 
@@ -22,9 +22,9 @@ export default function NeighborhoodLayer({ enabled }) {
       style={(feature) => {
         const selecionado = feature?.properties?.id === setorSelecionadoId;
         return {
-          color: selecionado ? '#1e2b3a' : '#3c4548',
-          weight: selecionado ? 3 : 1.5,
-          opacity: 0.95,
+          color: selecionado ? (dark ? '#fecc00' : '#1e2b3a') : (dark ? '#e2e8f0' : '#3c4548'),
+          weight: selecionado ? 3 : (dark ? 2 : 1.5),
+          opacity: dark ? 1 : 0.95,
           fillColor: '#fecc00',
           fillOpacity: selecionado ? 0.28 : 0.035,
         };

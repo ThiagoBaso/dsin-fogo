@@ -23,7 +23,7 @@ function buildCoverageOverlay(sources) {
   return L.imageOverlay(canvas.toDataURL('image/png'), L.latLngBounds(
     unprojectCoveragePosition(bounds.minX, bounds.minY),
     unprojectCoveragePosition(bounds.maxX, bounds.maxY),
-  ), { opacity: 0.42, interactive: false, pane: 'overlayPane' });
+  ), { opacity: 0.55, interactive: false, pane: 'overlayPane' });
 }
 
 export default function CoverageHeatLayer({ enabled, sources }) {
