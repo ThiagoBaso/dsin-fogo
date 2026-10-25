@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Agente, Ponto } from '../types';
 import EquipmentInformationTab from './equipment-details/EquipmentInformationTab';
 import AgentTeamTab from './equipment-details/AgentTeamTab';
@@ -28,6 +28,9 @@ export default function EquipmentDetails({
   const showCrewTab = ponto !== null && agentVehicleTypeIds.includes(ponto.tipo_id);
   const [tentativa, setTentativa] = useState(0);
   const [abaAtiva, setAbaAtiva] = useState<DetailTab>('identificacao');
+  const [arrastandoAbas, setArrastandoAbas] = useState(false);
+  const inicioArraste = useRef<{ x: number; scrollLeft: number; moveu: boolean } | null>(null);
+  const suprimirClique = useRef(false);
   const abasVisiveis = showCrewTab ? detailTabs : detailTabs.filter((tab) => tab.id !== 'equipe');
   const abaExibida = !showCrewTab && abaAtiva === 'equipe' ? 'identificacao' : abaAtiva;
   const {
@@ -54,6 +57,43 @@ export default function EquipmentDetails({
     if (!showCrewTab && abaAtiva === 'equipe') setAbaAtiva('identificacao');
   }, [showCrewTab, abaAtiva]);
 
+  function iniciarArraste(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    inicioArraste.current = { x: event.clientX, scrollLeft: event.currentTarget.scrollLeft, moveu: false };
+    suprimirClique.current = false;
+  }
+
+  function moverAbas(event: ReactPointerEvent<HTMLDivElement>) {
+    const inicio = inicioArraste.current;
+    if (!inicio || event.pointerType !== 'mouse') return;
+    const deslocamento = event.clientX - inicio.x;
+    if (!inicio.moveu && Math.abs(deslocamento) < 5) return;
+    if (!inicio.moveu) {
+      inicio.moveu = true;
+      setArrastandoAbas(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    event.currentTarget.scrollLeft = inicio.scrollLeft - deslocamento;
+    event.preventDefault();
+  }
+
+  function finalizarArraste() {
+    const moveu = inicioArraste.current?.moveu ?? false;
+    inicioArraste.current = null;
+    setArrastandoAbas(false);
+    if (moveu) {
+      suprimirClique.current = true;
+      window.setTimeout(() => { suprimirClique.current = false; }, 0);
+    }
+  }
+
+  function evitarCliqueAposArraste(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!suprimirClique.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suprimirClique.current = false;
+  }
+
   return (
     <section className="equipment-details" aria-label="Detalhes do equipamento">
       <div className="equipment-details-heading">
@@ -75,7 +115,16 @@ export default function EquipmentDetails({
         <p role="status">Carregando detalhes…</p>
       ) : (
         <>
-          <div className="equipment-details-tabs" role="tablist" aria-label="Seções dos detalhes do equipamento">
+          <div
+            className={`equipment-details-tabs${arrastandoAbas ? " is-dragging" : ""}`}
+            role="tablist"
+            aria-label="Seções dos detalhes do equipamento"
+            onPointerDown={iniciarArraste}
+            onPointerMove={moverAbas}
+            onPointerUp={finalizarArraste}
+            onPointerCancel={finalizarArraste}
+            onClickCapture={evitarCliqueAposArraste}
+          >
             {abasVisiveis.map((tab) => (
               <button
                 key={tab.id}

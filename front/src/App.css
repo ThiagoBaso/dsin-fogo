@@ -762,7 +762,20 @@
   overflow-x: auto;
   margin: 14px -4px 0;
   border-bottom: 1px solid var(--dsin-border);
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  cursor: grab;
+  overscroll-behavior-x: contain;
+}
+
+.equipment-details-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.equipment-details-tabs.is-dragging,
+.equipment-details-tabs.is-dragging button {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .equipment-details-tabs button {
