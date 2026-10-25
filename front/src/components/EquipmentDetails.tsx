@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Agente, Ponto } from '../types';
 import EquipmentInformationTab from './equipment-details/EquipmentInformationTab';
 import AgentTeamTab from './equipment-details/AgentTeamTab';
@@ -17,12 +17,16 @@ export default function EquipmentDetails({
   agentes,
   onSelectAgent,
   onClose,
+  onDetailsReady,
+  dark = false,
 }: {
   ponto: Ponto | null;
   dataHora: string | null;
   agentes: Agente[];
   onSelectAgent: (agent: Agente) => void;
   onClose: () => void;
+  onDetailsReady?: () => void;
+  dark?: boolean;
 }) {
   const equipamentoId = ponto?.id;
   const showCrewTab = ponto !== null && agentVehicleTypeIds.includes(ponto.tipo_id);
@@ -42,6 +46,7 @@ export default function EquipmentDetails({
     erroManutencoes,
   } = useEquipmentDetailsData(equipamentoId, dataHora, abaAtiva, tentativa);
   const atual = detalhes?.id === equipamentoId ? detalhes : null;
+  const detalhesProntos = atual !== null;
   const historicoAtivo = abaAtiva === 'historico' && atual?.mobilidade === 'movel';
   const {
     rotas,
@@ -56,6 +61,10 @@ export default function EquipmentDetails({
   useEffect(() => {
     if (!showCrewTab && abaAtiva === 'equipe') setAbaAtiva('identificacao');
   }, [showCrewTab, abaAtiva]);
+
+  useLayoutEffect(() => {
+    if (detalhesProntos) onDetailsReady?.();
+  }, [detalhesProntos, onDetailsReady]);
 
   function iniciarArraste(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType !== 'mouse' || event.button !== 0) return;
@@ -158,13 +167,13 @@ export default function EquipmentDetails({
           </div>
           <div id={tabPanelId} className="equipment-details-tabpanel" role="tabpanel" aria-labelledby={`equipment-tab-${abaExibida}`}>
             {abaExibida === 'identificacao' && (
-              <EquipmentInformationTab tab="identificacao" ponto={ponto} detalhes={atual} dataHora={dataHora} />
+              <EquipmentInformationTab tab="identificacao" ponto={ponto} detalhes={atual} dataHora={dataHora} dark={dark} />
             )}
             {abaExibida === 'posicao' && (
-              <EquipmentInformationTab tab="posicao" ponto={ponto} detalhes={atual} dataHora={dataHora} />
+              <EquipmentInformationTab tab="posicao" ponto={ponto} detalhes={atual} dataHora={dataHora} dark={dark} />
             )}
             {abaExibida === 'atributos' && (
-              <EquipmentInformationTab tab="atributos" ponto={ponto} detalhes={atual} dataHora={dataHora} />
+              <EquipmentInformationTab tab="atributos" ponto={ponto} detalhes={atual} dataHora={dataHora} dark={dark} />
             )}
             {abaExibida === 'equipe' && (
               <AgentTeamTab equipmentId={atual.id} agents={agentes} onSelectAgent={onSelectAgent} />

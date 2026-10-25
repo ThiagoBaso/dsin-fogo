@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import type { Agente } from '../types';
 import { Field, formatDate } from './equipment-details/EquipmentDetailField';
+import { AgentLocationMiniMap } from './LocationMiniMap';
 
 const shiftLabels: Record<'em_atividade' | 'programado', string> = {
   em_atividade: 'Em atividade',
@@ -25,13 +26,22 @@ export default function AgentDetails({
   agente,
   agentes,
   onClose,
+  onDetailsReady,
+  dark = false,
 }: {
   agente: Agente | null;
   agentes: Agente[];
   onClose: () => void;
+  onDetailsReady?: () => void;
+  dark?: boolean;
 }) {
   const [abaAtiva, setAbaAtiva] = useState<AgentDetailTab>('identificacao');
+  const detalhesProntos = agente !== null;
   const tabPanelId = 'agent-details-panel';
+
+  useLayoutEffect(() => {
+    if (detalhesProntos) onDetailsReady?.();
+  }, [detalhesProntos, onDetailsReady]);
 
   if (!agente) {
     return (
@@ -126,20 +136,23 @@ export default function AgentDetails({
           </div>
         )}
         {abaAtiva === 'posicao' && (
-          <div className="equipment-detail-group">
-            <h3>Posição compartilhada</h3>
-            <dl>
-              <Field label="Origem da posição" value={positionSourceLabels[agente.origem_posicao]} />
-              <Field label="Data e hora do GPS" value={formatDate(agente.posicao_registrada_em)} />
-              <Field label="Logradouro" value={agente.logradouro} />
-              <Field label="Referência" value={agente.referencia} />
-              <Field label="Bairro" value={agente.bairro} />
-              <Field label="Cidade/UF" value={[agente.cidade, agente.uf].filter(Boolean).join(' / ') || null} />
-              <Field label="CEP" value={cep} />
-              <Field label="Latitude" value={agente.latitude?.toFixed(7)} />
-              <Field label="Longitude" value={agente.longitude?.toFixed(7)} />
-            </dl>
-          </div>
+          <>
+            <div className="equipment-detail-group">
+              <h3>Posição compartilhada</h3>
+              <dl>
+                <Field label="Origem da posição" value={positionSourceLabels[agente.origem_posicao]} />
+                <Field label="Data e hora do GPS" value={formatDate(agente.posicao_registrada_em)} />
+                <Field label="Logradouro" value={agente.logradouro} />
+                <Field label="Referência" value={agente.referencia} />
+                <Field label="Bairro" value={agente.bairro} />
+                <Field label="Cidade/UF" value={[agente.cidade, agente.uf].filter(Boolean).join(' / ') || null} />
+                <Field label="CEP" value={cep} />
+                <Field label="Latitude" value={agente.latitude?.toFixed(7)} />
+                <Field label="Longitude" value={agente.longitude?.toFixed(7)} />
+              </dl>
+            </div>
+            <AgentLocationMiniMap agente={agente} dark={dark} />
+          </>
         )}
       </div>
     </section>

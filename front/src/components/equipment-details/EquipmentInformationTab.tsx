@@ -2,6 +2,7 @@ import type { DetalhesEquipamento, Ponto } from '../../types';
 import { equipmentSituations, equipmentTypes } from '../../equipmentCatalog';
 import { Field, formatAttribute, formatDate } from './EquipmentDetailField';
 import { attributeLabels } from './labels';
+import { EquipmentLocationMiniMap } from '../LocationMiniMap';
 
 type InformationTab = 'identificacao' | 'posicao' | 'atributos';
 
@@ -10,11 +11,13 @@ export default function EquipmentInformationTab({
   ponto,
   detalhes,
   dataHora,
+  dark,
 }: {
   tab: InformationTab;
   ponto: Ponto;
   detalhes: DetalhesEquipamento;
   dataHora: string | null;
+  dark: boolean;
 }) {
   if (tab === 'identificacao') {
     return (
@@ -62,15 +65,17 @@ export default function EquipmentInformationTab({
             <Field label="Logradouro" value={detalhes.logradouro} />
             <Field label="Referência" value={detalhes.referencia} />
             <Field label="Bairro" value={detalhes.bairro} />
-            <Field label="Região" value={detalhes.regiao} />
-            <Field label="Cidade" value={detalhes.cidade} />
-            <Field label="UF" value={detalhes.uf} />
+            <div className="equipment-location-city-region-uf">
+              <Field label="Cidade" value={detalhes.cidade} />
+              <Field label="Região" value={detalhes.regiao} />
+              <Field label="UF" value={detalhes.uf} />
+            </div>
             <Field label="CEP" value={detalhes.cep?.replace(/^(\d{5})(\d{3})$/, '$1-$2')} />
           </dl>
         </div>
         <div className="equipment-detail-group">
           <h3>Posição exibida no mapa</h3>
-          <dl>
+          <dl className="equipment-position-coordinates">
             <Field label="Latitude" value={ponto.latitude.toFixed(7)} />
             <Field label="Longitude" value={ponto.longitude.toFixed(7)} />
           </dl>
@@ -84,6 +89,7 @@ export default function EquipmentInformationTab({
             </dl>
           </div>
         )}
+        <EquipmentLocationMiniMap ponto={ponto} dark={dark} />
       </>
     );
   }

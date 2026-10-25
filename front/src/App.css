@@ -57,6 +57,7 @@
 .equipment-filters-actions button:focus-visible,
 .equipment-details-close:focus-visible,
 .equipment-details-tabs button:focus-visible,
+.location-mini-map-toggle:focus-visible,
 .item-select:focus-visible,
 .map-bar button:focus-visible,
 .equipment-filter-accordion summary:focus-visible,
@@ -905,6 +906,70 @@
   border-bottom: 1px solid var(--dsin-border);
 }
 
+.location-mini-map {
+  margin: 16px 0;
+  overflow: hidden;
+  border: 1px solid var(--dsin-border);
+  border-radius: 10px;
+  background: var(--dsin-surface);
+}
+
+.location-mini-map-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  background: var(--dsin-surface-subtle);
+  color: var(--dsin-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.location-mini-map-toggle:hover {
+  background: var(--dsin-hover);
+}
+
+.location-mini-map-toggle svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform 140ms ease;
+}
+
+.location-mini-map-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.location-mini-map-panel[hidden] {
+  display: none;
+}
+
+.location-mini-map-canvas {
+  height: 190px;
+  overflow: hidden;
+  background: var(--dsin-surface-subtle);
+}
+
+.location-mini-map-unavailable {
+  margin: 0;
+  padding: 16px;
+  color: var(--dsin-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .equipment-detail-group:last-child {
   border-bottom: 0;
 }
@@ -919,6 +984,27 @@
 
 .equipment-detail-group dl {
   margin: 0;
+}
+
+.equipment-detail-group dl.equipment-position-coordinates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.equipment-position-coordinates .equipment-detail-field + .equipment-detail-field {
+  margin-top: 0;
+}
+
+.equipment-location-city-region-uf {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.equipment-location-city-region-uf .equipment-detail-field + .equipment-detail-field {
+  margin-top: 0;
 }
 
 .equipment-agent-crew-list {
@@ -1858,6 +1944,10 @@
 
   .item-list {
     padding: 12px 8px;
+  }
+
+  .location-mini-map-canvas {
+    height: 160px;
   }
 
   .item-list-header {

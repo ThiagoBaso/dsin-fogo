@@ -3,6 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import EquipmentDetails from './EquipmentDetails';
 import type { DetalhesEquipamento, Ponto } from '../types';
 
+jest.mock('./LocationMiniMap', () => ({
+  EquipmentLocationMiniMap: () => null,
+  AgentLocationMiniMap: () => null,
+}));
+
 const ponto: Ponto = {
   id: 7,
   nome: 'Radar de teste',
@@ -83,9 +88,11 @@ beforeEach(() => {
 });
 
 test('renders each equipment detail tab and its loaded content', async () => {
-  render(<EquipmentDetails ponto={ponto} dataHora={null} agentes={[]} onSelectAgent={() => undefined} onClose={() => undefined} />);
+  const onDetailsReady = jest.fn();
+  render(<EquipmentDetails ponto={ponto} dataHora={null} agentes={[]} onSelectAgent={() => undefined} onClose={() => undefined} onDetailsReady={onDetailsReady} />);
 
   expect(await screen.findByText('SERIE-007')).toBeInTheDocument();
+  expect(onDetailsReady).toHaveBeenCalled();
   expect(screen.getByRole('heading', { name: 'Responsável' })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('tab', { name: 'Posição' }));

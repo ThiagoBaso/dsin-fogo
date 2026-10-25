@@ -7,6 +7,11 @@ jest.mock('./components/Map', () => ({
   default: () => null,
 }));
 
+jest.mock('./components/LocationMiniMap', () => ({
+  EquipmentLocationMiniMap: () => null,
+  AgentLocationMiniMap: () => null,
+}));
+
 beforeEach(() => {
   Object.defineProperty(global, 'fetch', {
     configurable: true,

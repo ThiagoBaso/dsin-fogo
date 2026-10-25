@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Map from './components/Map';
 import TopBarMap from './components/TopBarMap';
@@ -100,6 +100,14 @@ function App() {
   const [dataHoraAplicada, setDataHoraAplicada] = useState<string | null>(null);
   const [painelExpandido, setPainelExpandido] = useState(true);
   const painelDetalhes = useRef<HTMLElement>(null);
+  const scrollDetalhesPendente = useRef<number | null>(null);
+  const restaurarScrollDetalhes = useCallback(() => {
+    const scrollTop = scrollDetalhesPendente.current;
+    const painel = painelDetalhes.current;
+    if (scrollTop === null || !painel) return;
+    painel.scrollTop = scrollTop;
+    scrollDetalhesPendente.current = null;
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema;
@@ -257,15 +265,19 @@ function App() {
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
   function visualizarEquipamento(ponto: Ponto) {
+    if (detalhesAgenteId !== null || detalhesId !== ponto.id) {
+      scrollDetalhesPendente.current = painelDetalhes.current?.scrollTop ?? 0;
+    }
     setDetalhesAgenteId(null);
     setDetalhesId(ponto.id);
-    painelDetalhes.current?.scrollTo({ top: 0 });
   }
 
   function visualizarAgente(agente: Agente) {
+    if (detalhesId !== null || detalhesAgenteId !== agente.id) {
+      scrollDetalhesPendente.current = painelDetalhes.current?.scrollTop ?? 0;
+    }
     setDetalhesId(null);
     setDetalhesAgenteId(agente.id);
-    painelDetalhes.current?.scrollTo({ top: 0 });
   }
 
   function selecionarAgenteNoMapa(agente: Agente) {
@@ -562,11 +574,13 @@ function App() {
       </div>
       <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : 'Informações do equipamento'} ref={painelDetalhes}>
         {detalhesAgenteId !== null
-          ? <AgentDetails agente={agenteDetalhes} agentes={agentes} onClose={() => setDetalhesAgenteId(null)} />
+          ? <AgentDetails agente={agenteDetalhes} agentes={agentes} dark={tema === 'dark'} onDetailsReady={restaurarScrollDetalhes} onClose={() => setDetalhesAgenteId(null)} />
           : <EquipmentDetails
             ponto={pontoDetalhes}
             dataHora={dataHoraAplicada}
             agentes={agentes}
+            dark={tema === 'dark'}
+            onDetailsReady={restaurarScrollDetalhes}
             onSelectAgent={visualizarAgente}
             onClose={() => setDetalhesId(null)}
           />}
