@@ -74,6 +74,7 @@ export type AttributeFilterState = Record<string, AttributeFilterSelection>;
 export interface Ponto {
   id: number;
   nome: string;
+  numero_serie: string;
   tipo_id: number;
   tipo: string;
   mobilidade: 'fixo' | 'movel';

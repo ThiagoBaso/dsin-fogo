@@ -37,8 +37,21 @@ function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
+function getNumeroSerie(ponto: Ponto) {
+  const numeroSerie = typeof ponto.numero_serie === 'string' ? ponto.numero_serie.trim() : '';
+  if (numeroSerie) return numeroSerie;
+
+  const prefixo = `${ponto.tipo} `;
+  return ponto.nome.toLocaleLowerCase('pt-BR').startsWith(prefixo.toLocaleLowerCase('pt-BR'))
+    ? ponto.nome.slice(prefixo.length).trim()
+    : '';
+}
+
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
+  const [buscaSerieMapa, setBuscaSerieMapa] = useState('');
+  const [buscaEquipamentos, setBuscaEquipamentos] = useState('');
+  const [buscaAgentes, setBuscaAgentes] = useState('');
   const [exibirContornoBairros, setExibirContornoBairros] = useState(false);
   const [pontos, setPontos] = useState<Ponto[]>([]);
   const [agentes, setAgentes] = useState<Agente[]>([]);
@@ -174,9 +187,15 @@ function App() {
       return { ...ponto, latitude, longitude };
     });
   }, [pontos, tiposAplicados, situacoesAplicadas, localizacaoAplicada, atributosAplicados, posicaoMovel]);
-  const pontosMapa = exibirApenasSelecionados
-    ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
-    : pontosFiltrados;
+  const pontosMapa = useMemo(() => {
+    const equipamentosExibidos = exibirApenasSelecionados
+      ? pontosFiltrados.filter((ponto) => selecionadosIds.includes(ponto.id))
+      : pontosFiltrados;
+    const termo = buscaSerieMapa.trim().toLocaleLowerCase('pt-BR');
+    return termo
+      ? equipamentosExibidos.filter((ponto) => getNumeroSerie(ponto).toLocaleLowerCase('pt-BR').includes(termo))
+      : equipamentosExibidos;
+  }, [exibirApenasSelecionados, pontosFiltrados, selecionadosIds, buscaSerieMapa]);
   const pontoDetalhes = pontosFiltrados.find((ponto) => ponto.id === detalhesId) || null;
   const agentesFiltrados = useMemo(() => {
     const busca = localizacaoAplicada.busca.trim().toLocaleLowerCase('pt-BR');
@@ -199,6 +218,22 @@ function App() {
         && correspondeLocalizacao;
     });
   }, [agentes, filtrosAgentes, localizacaoAplicada]);
+  const equipamentosNaLista = useMemo(() => {
+    const termo = buscaEquipamentos.trim().toLocaleLowerCase('pt-BR');
+    return termo
+      ? pontosFiltrados.filter((ponto) => ponto.nome.toLocaleLowerCase('pt-BR').includes(termo))
+      : pontosFiltrados;
+  }, [pontosFiltrados, buscaEquipamentos]);
+  const agentesNaLista = useMemo(() => {
+    const termo = buscaAgentes.trim().toLocaleLowerCase('pt-BR');
+    return termo
+      ? agentesFiltrados.filter((agente) => [agente.nome, agente.matricula, agente.cargo, agente.orgao_nome, agente.veiculo_numero_serie]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('pt-BR')
+        .includes(termo))
+      : agentesFiltrados;
+  }, [agentesFiltrados, buscaAgentes]);
   const agentesMapa = filtrosAgentes.showOnMap ? agentesFiltrados : [];
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
@@ -408,6 +443,16 @@ function App() {
         <TopBarMap
           abaAtiva={abaAtiva}
           onChange={setAbaAtiva}
+          busca={abaAtiva === 'mapa'
+            ? buscaSerieMapa
+            : abaAtiva === 'lista'
+              ? buscaEquipamentos
+              : buscaAgentes}
+          onBuscaChange={abaAtiva === 'mapa'
+            ? setBuscaSerieMapa
+            : abaAtiva === 'lista'
+              ? setBuscaEquipamentos
+              : setBuscaAgentes}
         />
         {erroAgentes && <p className="api-message api-error" role="alert">{erroAgentes}</p>}
         {carregando && <p className="api-message" role="status">Carregando equipamentos…</p>}
@@ -429,7 +474,7 @@ function App() {
         </div>
         {abaAtiva === 'lista' && (
           <ItemList
-            pontos={pontosFiltrados}
+            pontos={equipamentosNaLista}
             selecionadosIds={selecionadosIds}
             detalhesId={detalhesId}
             onVisualizar={visualizarEquipamento}
@@ -446,7 +491,7 @@ function App() {
         )}
         {abaAtiva === 'agentes' && (
           <AgentList
-            agents={agentesFiltrados}
+            agents={agentesNaLista}
             selectedAgentId={detalhesAgenteId}
             onSelect={visualizarAgente}
           />

@@ -184,6 +184,7 @@ def list_equipamentos(em: datetime | None = None):
             """
             SELECT e.id_equipamento AS id,
                    CONCAT(t.nome, ' ', e.numero_serie) AS nome,
+                   e.numero_serie,
                    t.id_tipo AS tipo_id, t.nome AS tipo, t.mobilidade,
                    s.id_situacao AS situacao_id, s.nome AS situacao,
                    CAST(COALESCE(pos.latitude, l.latitude) AS DOUBLE) AS latitude,
@@ -229,6 +230,7 @@ def list_equipamentos(em: datetime | None = None):
         """
         SELECT e.id_equipamento AS id,
                CONCAT(t.nome, ' ', e.numero_serie) AS nome,
+               e.numero_serie,
                t.id_tipo AS tipo_id,
                t.nome AS tipo,
                t.mobilidade,

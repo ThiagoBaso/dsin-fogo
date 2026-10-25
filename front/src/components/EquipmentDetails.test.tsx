@@ -6,6 +6,7 @@ import type { DetalhesEquipamento, Ponto } from '../types';
 const ponto: Ponto = {
   id: 7,
   nome: 'Radar de teste',
+  numero_serie: 'SERIE-007',
   tipo_id: 1,
   tipo: 'Radar de velocidade',
   mobilidade: 'movel',

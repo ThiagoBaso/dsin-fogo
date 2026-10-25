@@ -3,9 +3,24 @@ import { Aba } from '../types';
 interface TopBarMapProps {
     abaAtiva: Aba;
     onChange: (aba: Aba) => void;
+    busca: string;
+    onBuscaChange: (busca: string) => void;
 }
 
-function TopBarMap({ abaAtiva, onChange }: TopBarMapProps) {
+function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange }: TopBarMapProps) {
+    const isMapa = abaAtiva === 'mapa';
+    const isLista = abaAtiva === 'lista';
+    const searchLabel = isMapa
+        ? 'Buscar equipamento no mapa pelo número de série'
+        : isLista
+            ? 'Buscar equipamento pelo nome'
+            : 'Buscar agente por nome, matrícula ou cargo';
+    const searchPlaceholder = isMapa
+        ? 'Buscar número de série'
+        : isLista
+            ? 'Buscar equipamento'
+            : 'Buscar agente';
+
     return (
         <div className="map-bar">
             <div className="map-bar-switch" role="group" aria-label="Modo de visualização">
@@ -31,6 +46,19 @@ function TopBarMap({ abaAtiva, onChange }: TopBarMapProps) {
                     <span>Agentes</span>
                 </button>
             </div>
+            <label className="map-bar-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m16 16 4 4" />
+                </svg>
+                <input
+                    type="search"
+                    aria-label={searchLabel}
+                    placeholder={searchPlaceholder}
+                    value={busca}
+                    onChange={(event) => onBuscaChange(event.target.value)}
+                />
+            </label>
         </div>
     )
 }

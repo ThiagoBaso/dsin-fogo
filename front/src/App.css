@@ -1222,6 +1222,7 @@
   width: 100%;
   display: flex;
   align-items: center;
+  gap: 14px;
   min-height: 62px;
   padding: 10px 16px;
   box-sizing: border-box;
@@ -1237,6 +1238,45 @@
   border: 1px solid #e2e6e7;
   border-radius: 11px;
   background: #f2f4f4;
+}
+
+.map-bar-search {
+  display: flex;
+  flex: 0 1 360px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 42px;
+  margin-left: auto;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsin-border);
+  border-radius: 8px;
+  background: var(--dsin-page);
+  color: var(--dsin-muted);
+}
+
+.map-bar-search svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.map-bar-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--dsin-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.map-bar-search input::placeholder {
+  color: var(--dsin-muted);
+  opacity: 1;
 }
 
 .map-bar button {
@@ -1311,7 +1351,7 @@
 
 .item-list-header {
   display: grid;
-  grid-template-columns: auto minmax(140px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
@@ -1319,25 +1359,6 @@
 
 .item-list-header h2 {
   margin: 0;
-}
-
-.item-list-search {
-  width: 100%;
-  min-width: 0;
-  min-height: 38px;
-  box-sizing: border-box;
-  padding: 8px 11px;
-  border: 1px solid var(--dsin-border);
-  border-radius: 7px;
-  background: var(--dsin-surface);
-  color: var(--dsin-ink);
-  font: inherit;
-  font-size: 13px;
-}
-
-.item-list-search:focus-visible {
-  outline: 2px solid var(--dsin-focus);
-  outline-offset: 1px;
 }
 
 .item-list-header button {
@@ -1459,6 +1480,18 @@
   cursor: pointer;
 }
 
+@media (max-width: 1100px) {
+  .map-bar {
+    flex-wrap: wrap;
+  }
+
+  .map-bar-search {
+    flex: 1 1 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+}
+
 @media (max-width: 760px) {
   .left-painel {
     width: 26%;
@@ -1499,6 +1532,8 @@
   }
 
   .map-bar {
+    flex-direction: column;
+    align-items: stretch;
     min-height: 54px;
     padding: 8px 10px;
     gap: 6px;
@@ -1509,6 +1544,12 @@
     box-sizing: border-box;
     gap: 2px;
     padding: 3px;
+  }
+
+  .map-bar-search {
+    flex: 0 1 auto;
+    width: 100%;
+    min-height: 40px;
   }
 
   .map-bar button {
@@ -1523,12 +1564,4 @@
     display: none;
   }
 
-  .item-list-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .item-list-search {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
 }

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { Agente } from '../types';
 
 export default function AgentList({
@@ -10,28 +9,12 @@ export default function AgentList({
   selectedAgentId: number | null;
   onSelect: (agent: Agente) => void;
 }) {
-  const [search, setSearch] = useState('');
-  const term = search.trim().toLocaleLowerCase('pt-BR');
-  const visibleAgents = term
-    ? agents.filter((agent) => [agent.nome, agent.matricula, agent.cargo, agent.orgao_nome, agent.veiculo_numero_serie]
-      .filter(Boolean)
-      .join(' ')
-      .toLocaleLowerCase('pt-BR')
-      .includes(term))
-    : agents;
+  const visibleAgents = agents;
 
   return (
     <section className="item-list agent-list" aria-label="Lista de agentes">
       <div className="item-list-header">
         <h2>Agentes</h2>
-        <input
-          className="item-list-search"
-          type="search"
-          aria-label="Buscar agente por nome, matrícula ou cargo"
-          placeholder="Buscar agente"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
         <span className="agent-list-count" aria-live="polite">{visibleAgents.length}</span>
       </div>
       <ul>

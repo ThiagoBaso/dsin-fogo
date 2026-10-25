@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Ponto } from '../types';
 import { equipmentSituations } from '../equipmentCatalog';
 
@@ -17,11 +16,7 @@ function ItemList({
   onAlternarSelecao: (pontoId: number) => void;
   onAlternarTodos: (selecionar: boolean, idsVisiveis: number[]) => void;
 }) {
-  const [buscaNome, setBuscaNome] = useState('');
-  const termoBusca = buscaNome.trim().toLocaleLowerCase('pt-BR');
-  const pontosVisiveis = termoBusca
-    ? pontos.filter((ponto) => ponto.nome.toLocaleLowerCase('pt-BR').includes(termoBusca))
-    : pontos;
+  const pontosVisiveis = pontos;
   const todosSelecionados = pontosVisiveis.length > 0
     && pontosVisiveis.every((ponto) => selecionadosIds.includes(ponto.id));
 
@@ -29,14 +24,6 @@ function ItemList({
     <section className="item-list" aria-label="Lista de itens">
       <div className="item-list-header">
         <h2>Itens</h2>
-        <input
-          className="item-list-search"
-          type="search"
-          aria-label="Buscar equipamento pelo nome"
-          placeholder="Buscar pelo nome"
-          value={buscaNome}
-          onChange={(event) => setBuscaNome(event.target.value)}
-        />
         <button
           type="button"
           onClick={() => onAlternarTodos(!todosSelecionados, pontosVisiveis.map((ponto) => ponto.id))}
