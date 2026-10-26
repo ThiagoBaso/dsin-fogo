@@ -408,13 +408,13 @@ export default function FilterPanel({
                 />
                 <span>Permitir multisseleção</span>
               </label>
-              <label className="equipment-display-option" title="Divisórias internas seguem ruas do OpenStreetMap; setores e limite externo são fictícios e não oficiais.">
+              <label className="equipment-display-option" title="Limites oficiais dos setores censitários do IBGE de 2022.">
                 <input
                   type="checkbox"
                   checked={display.neighborhoodBoundaries}
                   onChange={(event) => display.onNeighborhoodBoundariesChange(event.target.checked)}
                 />
-                <span>Exibir contornos dos bairros (fictícios)</span>
+                <span>Exibir setores censitários do IBGE</span>
               </label>
             </section>
           </div>

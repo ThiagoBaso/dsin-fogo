@@ -8,6 +8,7 @@ import AgentDetails from './components/AgentDetails';
 import EquipmentDetails from './components/EquipmentDetails';
 import OccurrenceDetails from './components/OccurrenceDetails';
 import OccurrenceTrendsPanel from './components/OccurrenceTrendsPanel';
+import OccurrencePredictionPanel from './components/OccurrencePredictionPanel';
 import FilterPanel from './components/FilterPanel';
 import {
   buildOccurrenceHeatGrid, collectOccurrenceHeatSources, countOccurrencePeriodDays, occurrenceRecurrenceGradient,
@@ -24,7 +25,10 @@ import {
   OcorrenciaMapa,
   OcorrenciaTendencia,
   Ponto,
+  PrevisaoAreaFeatureCollection,
+  PrevisaoOcorrencias,
   RotaVeiculo,
+  SetorCensitarioFeatureCollection,
 } from './types';
 import { equipmentSituations, equipmentTypes } from './equipmentCatalog';
 import { attributeLabels } from './components/equipment-details/labels';
@@ -41,6 +45,8 @@ const occurrenceSeverityOptions = [
   { id: 'alta', label: 'Alta' },
   { id: 'critica', label: 'Crítica' },
 ];
+
+const occurrencePredictionGradient = 'linear-gradient(90deg, #2563eb, #22c55e, #eab308, #f97316, #dc2626)';
 
 const emptyLocationFilters: LocationFilters = {
   bairro: '',
@@ -62,6 +68,10 @@ function formatResolutionHours(hours: number) {
 
 function formatQuantityScale(value: number) {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+}
+
+function formatProbabilityScale(value: number) {
+  return `${(value * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 }
 
 function startOfTodayValue() {
@@ -95,6 +105,10 @@ function App() {
   const [buscaEquipamentos, setBuscaEquipamentos] = useState('');
   const [buscaAgentes, setBuscaAgentes] = useState('');
   const [exibirContornoBairros, setExibirContornoBairros] = useState(false);
+  const [setoresCensitariosGeoJson, setSetoresCensitariosGeoJson] = useState<SetorCensitarioFeatureCollection | null>(null);
+  const [erroSetoresCensitarios, setErroSetoresCensitarios] = useState('');
+  const [areasPrevisaoGeoJson, setAreasPrevisaoGeoJson] = useState<PrevisaoAreaFeatureCollection | null>(null);
+  const [erroAreasPrevisao, setErroAreasPrevisao] = useState('');
   const [pontos, setPontos] = useState<Ponto[]>([]);
   const [agentes, setAgentes] = useState<Agente[]>([]);
   const [erroAgentes, setErroAgentes] = useState('');
@@ -106,6 +120,12 @@ function App() {
   const [ocorrenciasTendencia, setOcorrenciasTendencia] = useState<OcorrenciaTendencia[]>([]);
   const [carregandoTendencias, setCarregandoTendencias] = useState(false);
   const [erroTendencias, setErroTendencias] = useState('');
+  const [previsaoAtiva, setPrevisaoAtiva] = useState(false);
+  const [previsaoOcorrencias, setPrevisaoOcorrencias] = useState<PrevisaoOcorrencias | null>(null);
+  const [carregandoPrevisao, setCarregandoPrevisao] = useState(false);
+  const [erroPrevisao, setErroPrevisao] = useState('');
+  const [metricaPrevisao, setMetricaPrevisao] = useState<'quantidade' | 'probabilidade'>('quantidade');
+  const [areaPrevisaoSelecionadaId, setAreaPrevisaoSelecionadaId] = useState<number | null>(null);
   const [tiposOcorrenciaSelecionados, setTiposOcorrenciaSelecionados] = useState<string[] | null>(null);
   const [tiposOcorrenciaAplicados, setTiposOcorrenciaAplicados] = useState<string[] | null>(null);
   const [gravidadesOcorrenciaSelecionadas, setGravidadesOcorrenciaSelecionadas] = useState<string[] | null>(null);
@@ -374,6 +394,22 @@ function App() {
   );
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
   const mostrarTendenciasMapa = abaAtiva === 'mapa' && mapaCalorOcorrencias;
+  const mostrarPrevisaoMapa = abaAtiva === 'mapa' && previsaoAtiva;
+  const carregandoCamadaPrevisao = carregandoPrevisao
+    || (previsaoAtiva && !areasPrevisaoGeoJson && !erroAreasPrevisao);
+  const erroCamadaPrevisao = erroPrevisao || (previsaoAtiva ? erroAreasPrevisao : '');
+  const quantidadeMaximaPrevisao = useMemo(() => {
+    const quantities = previsaoOcorrencias?.areas.map((area) => area.quantidade_esperada).sort((a, b) => a - b) || [];
+    if (quantities.length === 0) return 0;
+    return quantities[Math.min(quantities.length - 1, Math.ceil(quantities.length * 0.9) - 1)];
+  }, [previsaoOcorrencias]);
+  const probabilidadeMaximaPrevisao = useMemo(() => {
+    const probabilities = previsaoOcorrencias?.areas
+      .map((area) => area.probabilidade_grave_24h)
+      .sort((a, b) => a - b) || [];
+    if (probabilities.length === 0) return 0.01;
+    return Math.max(0.01, probabilities[Math.min(probabilities.length - 1, Math.ceil(probabilities.length * 0.9) - 1)]);
+  }, [previsaoOcorrencias]);
 
   function visualizarEquipamento(ponto: Ponto) {
     if (detalhesAgenteId !== null || ocorrenciaDetalhes !== null || detalhesId !== ponto.id) {
@@ -580,6 +616,90 @@ function App() {
   }, [mapaCalorOcorrencias, periodoOcorrenciasAplicado]);
 
   useEffect(() => {
+    if (!exibirContornoBairros) return undefined;
+    if (setoresCensitariosGeoJson) return undefined;
+
+    const controller = new AbortController();
+    setErroSetoresCensitarios('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/setores-censitarios`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<SetorCensitarioFeatureCollection>;
+      })
+      .then((geoJson) => {
+        if (!controller.signal.aborted) setSetoresCensitariosGeoJson(geoJson);
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') {
+          setErroSetoresCensitarios('Não foi possível carregar os setores censitários do IBGE.');
+        }
+      });
+
+    return () => controller.abort();
+  }, [exibirContornoBairros, setoresCensitariosGeoJson]);
+
+  useEffect(() => {
+    if (!previsaoAtiva || areasPrevisaoGeoJson) return undefined;
+
+    const controller = new AbortController();
+    setErroAreasPrevisao('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/areas-previsao`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<PrevisaoAreaFeatureCollection>;
+      })
+      .then((geoJson) => {
+        if (!controller.signal.aborted) setAreasPrevisaoGeoJson(geoJson);
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') {
+          setErroAreasPrevisao('Não foi possível carregar as áreas agrupadas da previsão.');
+        }
+      });
+
+    return () => controller.abort();
+  }, [previsaoAtiva, areasPrevisaoGeoJson]);
+
+  useEffect(() => {
+    if (!previsaoAtiva) {
+      setCarregandoPrevisao(false);
+      setErroPrevisao('');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setCarregandoPrevisao(true);
+    setErroPrevisao('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/previsoes/ocorrencias`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<PrevisaoOcorrencias>;
+      })
+      .then((dados) => {
+        if (controller.signal.aborted) return;
+        setPrevisaoOcorrencias(dados);
+        if (dados.areas.length > 0) {
+          setAreaPrevisaoSelecionadaId((atual) => (
+            atual !== null && dados.areas.some((area) => area.id === atual)
+              ? atual
+              : [...dados.areas].sort((left, right) => right.probabilidade_grave_24h - left.probabilidade_grave_24h)[0].id
+          ));
+        }
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') {
+          setPrevisaoOcorrencias(null);
+          setErroPrevisao('Não foi possível calcular a previsão de ocorrências.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCarregandoPrevisao(false);
+      });
+
+    return () => controller.abort();
+  }, [previsaoAtiva]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const query = dataHoraAplicada
       ? `?em=${encodeURIComponent(dataHoraAplicada)}`
@@ -738,7 +858,7 @@ function App() {
         {erro && <p className="api-message api-error" role="alert">{erro}</p>}
         {erroRotas && <p className="api-message api-error" role="alert">{erroRotas}</p>}
         {erroOcorrencias && <p className="api-message api-error" role="alert">{erroOcorrencias}</p>}
-        <div className={`map-panel${mapaCalorCobertura || mapaCalorOcorrencias ? ' map-heat-active' : ''}`} hidden={abaAtiva !== 'mapa'}>
+        <div className={`map-panel${mapaCalorCobertura || mapaCalorOcorrencias || previsaoAtiva ? ' map-heat-active' : ''}`} hidden={abaAtiva !== 'mapa'}>
           <Map
             pontos={exibirItensMapa ? pontosMapa : []}
             rotas={rotas}
@@ -755,6 +875,8 @@ function App() {
             onSelectAgent={selecionarAgenteNoMapa}
             selecionadosIds={selecionadosIds}
             exibirContornoBairros={exibirContornoBairros}
+            censusSectorGeoJson={setoresCensitariosGeoJson}
+            predictionAreaGeoJson={areasPrevisaoGeoJson}
             temaEscuro={tema === 'dark'}
             coverageHeatEnabled={mapaCalorCobertura}
             coverageSources={cobertura.sources}
@@ -762,14 +884,26 @@ function App() {
             occurrenceHeatGrid={gradeCalorOcorrencias}
             occurrenceHeatMode={modoCalorOcorrencias}
             occurrenceHeatResolutionSummary={resumoCalorResolucao}
+            occurrencePredictionEnabled={previsaoAtiva && previsaoOcorrencias?.status === 'ok' && Boolean(areasPrevisaoGeoJson)}
+            occurrencePredictions={previsaoOcorrencias?.areas ?? []}
+            occurrencePredictionMetric={metricaPrevisao}
+            selectedPredictionAreaId={areaPrevisaoSelecionadaId}
+            onSelectPredictionArea={setAreaPrevisaoSelecionadaId}
+            occurrencePredictionGeneratedAt={previsaoOcorrencias?.gerada_em ?? ''}
           />
           <div className="map-heat-control" role="group" aria-label="Filtros de mapa de calor">
             <strong>Mapa de calor</strong>
+            {exibirContornoBairros && erroSetoresCensitarios && (
+              <p className="map-heat-description is-error" role="alert">{erroSetoresCensitarios}</p>
+            )}
             <label className="map-heat-option">
               <input
                 type="checkbox"
                 checked={mapaCalorCobertura}
-                onChange={(event) => setMapaCalorCobertura(event.target.checked)}
+                onChange={(event) => {
+                  setMapaCalorCobertura(event.target.checked);
+                  if (event.target.checked) setPrevisaoAtiva(false);
+                }}
                 aria-label="Aplicar mapa de calor de cobertura"
               />
               <span>Cobertura</span>
@@ -778,7 +912,10 @@ function App() {
               <input
                 type="checkbox"
                 checked={mapaCalorOcorrencias}
-                onChange={(event) => setMapaCalorOcorrencias(event.target.checked)}
+                onChange={(event) => {
+                  setMapaCalorOcorrencias(event.target.checked);
+                  if (event.target.checked) setPrevisaoAtiva(false);
+                }}
                 aria-label="Aplicar mapa de calor de ocorrências"
               />
               <span>Ocorrências</span>
@@ -874,6 +1011,57 @@ function App() {
                 )}
               </>
             )}
+            <label className="map-heat-option">
+              <input
+                type="checkbox"
+                checked={previsaoAtiva}
+                onChange={(event) => {
+                  setPrevisaoAtiva(event.target.checked);
+                  if (event.target.checked) {
+                    setMapaCalorCobertura(false);
+                    setMapaCalorOcorrencias(false);
+                  }
+                }}
+                aria-label="Exibir previsão de ocorrências nas próximas 24 horas"
+              />
+              <span>Previsão (24 h)</span>
+            </label>
+            {previsaoAtiva && (
+              <>
+                <label className="map-heat-mode">
+                  <span>Visualizar por</span>
+                  <select
+                    value={metricaPrevisao}
+                    onChange={(event) => setMetricaPrevisao(event.target.value as 'quantidade' | 'probabilidade')}
+                    aria-label="Visualizar previsão por"
+                  >
+                    <option value="quantidade">Quantidade esperada</option>
+                    <option value="probabilidade">Chance de ocorrência grave</option>
+                  </select>
+                </label>
+                {carregandoCamadaPrevisao && <p className="map-heat-description" role="status">{carregandoPrevisao ? 'Calculando previsão…' : 'Carregando áreas agrupadas…'}</p>}
+                {erroCamadaPrevisao && <p className="map-heat-description is-error" role="alert">{erroCamadaPrevisao}</p>}
+                {!carregandoCamadaPrevisao && !erroCamadaPrevisao && previsaoOcorrencias?.status === 'ok' && (
+                  <>
+                    <p className="map-heat-description">
+                      {previsaoOcorrencias.quantidade_areas} áreas agrupadas · {previsaoOcorrencias.quantidade_setores} setores · {previsaoOcorrencias.periodo_historico_semanas} semanas comparáveis. Não depende dos filtros de ocorrências.
+                    </p>
+                    <div className="map-heat-legend" aria-label="Escala da previsão de ocorrências">
+                      <span>{metricaPrevisao === 'quantidade' ? 'Ocorrências esperadas nas próximas 24 h' : 'Chance de ocorrência grave nas próximas 24 h'}</span>
+                      <span className="map-heat-legend-scale" style={{ background: occurrencePredictionGradient }} aria-hidden="true" />
+                      <div>
+                        {metricaPrevisao === 'quantidade'
+                          ? <><span>0</span><span>P90+ ({formatQuantityScale(quantidadeMaximaPrevisao)})</span></>
+                          : <><span>0%</span><span>P90+ ({formatProbabilityScale(probabilidadeMaximaPrevisao)})</span></>}
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!carregandoCamadaPrevisao && previsaoOcorrencias?.status === 'sem_historico' && (
+                  <p className="map-heat-description">Histórico insuficiente para estimar ocorrências.</p>
+                )}
+              </>
+            )}
           </div>
           <div className="map-selection-summary" aria-label="Contagem de selecao no mapa" aria-live="polite">
             <div className="map-selection-count-row">
@@ -966,12 +1154,22 @@ function App() {
       </div>
       <aside
         className='rigth-painel'
-        aria-label={mostrarTendenciasMapa
-          ? 'Tendências do mapa e detalhes'
+        aria-label={mostrarPrevisaoMapa
+          ? 'Previsão de ocorrências e detalhes'
+          : mostrarTendenciasMapa ? 'Tendências do mapa e detalhes'
           : detalhesAgenteId !== null ? 'Informações do agente'
             : ocorrenciaDetalhes !== null ? 'Informações da ocorrência' : 'Informações do equipamento'}
         ref={painelDetalhes}
       >
+        {mostrarPrevisaoMapa && (
+          <OccurrencePredictionPanel
+            forecast={previsaoOcorrencias}
+            selectedAreaId={areaPrevisaoSelecionadaId}
+            onSelectArea={setAreaPrevisaoSelecionadaId}
+            loading={carregandoCamadaPrevisao}
+            error={erroCamadaPrevisao}
+          />
+        )}
         {mostrarTendenciasMapa && (
           <OccurrenceTrendsPanel
             occurrences={ocorrenciasTendencia}
@@ -992,7 +1190,7 @@ function App() {
               error={erroOcorrencias}
               onClose={() => setOcorrenciaDetalhes(null)}
             />
-            : !mostrarTendenciasMapa || pontoDetalhes
+            : (!mostrarTendenciasMapa && !mostrarPrevisaoMapa) || pontoDetalhes
               ? <EquipmentDetails
             ponto={pontoDetalhes}
             dataHora={dataHoraAplicada}

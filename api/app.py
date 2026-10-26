@@ -3,11 +3,20 @@ from __future__ import annotations
 
 import os
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import mysql.connector
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from forecasting import HISTORY_WEEKS, backtest_period, build_occurrence_forecast, local_now
+from geography import (
+    assign_occurrences_to_prediction_areas,
+    census_sector_geojson,
+    prediction_area_geojson,
+    prediction_area_neighbors,
+    prediction_areas,
+)
 
 app = FastAPI(title="F.O.G.O. API", version="1.0.0")
 app.add_middleware(
@@ -135,6 +144,52 @@ def list_ocorrencias_analise(
         ORDER BY COALESCE(o.resolvida_em, o.ocorrida_em), o.id_ocorrencia
         """,
         (modo, modo, inicio, fim, inicio, fim),
+    )
+
+
+@app.get("/api/previsoes/ocorrencias")
+def forecast_ocorrencias():
+    generated_at = local_now()
+    backtest_start, _backtest_end = backtest_period(generated_at)
+    history_start = backtest_start - timedelta(weeks=HISTORY_WEEKS + 2)
+    occurrences = fetch_all(
+        """
+        SELECT o.ocorrida_em, o.gravidade,
+               CAST(l.latitude AS DOUBLE) AS latitude,
+               CAST(l.longitude AS DOUBLE) AS longitude
+        FROM ocorrencias o
+        JOIN localizacoes l ON l.id_localizacao = o.id_localizacao
+        WHERE o.status <> 'cancelada'
+          AND o.ocorrida_em >= %s
+          AND o.ocorrida_em < %s
+        ORDER BY o.ocorrida_em
+        """,
+        (history_start, generated_at),
+    )
+    mapped_occurrences, unmatched_count = assign_occurrences_to_prediction_areas(occurrences)
+    result = build_occurrence_forecast(
+        prediction_areas(),
+        mapped_occurrences,
+        generated_at,
+        prediction_area_neighbors(),
+    )
+    result["ocorrencias_fora_malha"] = unmatched_count
+    return result
+
+
+@app.get("/api/setores-censitarios")
+def list_census_sectors():
+    return JSONResponse(
+        content=census_sector_geojson(),
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/api/areas-previsao")
+def list_prediction_areas():
+    return JSONResponse(
+        content=prediction_area_geojson(),
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 

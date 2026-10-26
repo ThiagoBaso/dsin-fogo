@@ -158,6 +158,112 @@ export interface OcorrenciaTendencia {
   longitude: number;
 }
 
+export interface PrevisaoOcorrenciaIntervalo {
+  inicio: string;
+  fim: string;
+  quantidade_esperada: number;
+  graves_esperadas: number;
+  probabilidade_grave: number;
+  faixa_historica_p10: number;
+  faixa_historica_p90: number;
+  janelas_com_graves: number;
+  janelas_avaliadas: number;
+  janelas_efetivas: number;
+}
+
+export interface PrevisaoOcorrenciaArea {
+  id: number;
+  nome: string;
+  quantidade_setores: number;
+  quantidade_esperada: number;
+  graves_esperadas: number;
+  probabilidade_grave_24h: number;
+  faixa_historica_p10: number;
+  faixa_historica_p90: number;
+  janelas_com_graves: number;
+  janelas_avaliadas: number;
+  janelas_efetivas: number;
+  intervalos: PrevisaoOcorrenciaIntervalo[];
+}
+
+export interface PrevisaoAreaFeatureCollection {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    properties: {
+      id: number;
+      nome: string;
+      quantidade_setores: number;
+      distritos: string[];
+    };
+    geometry: {
+      type: 'Polygon' | 'MultiPolygon';
+      coordinates: number[][][] | number[][][][];
+    };
+  }>;
+}
+
+export interface SetorCensitarioFeatureCollection {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    properties: {
+      id: number;
+      codigo_setor: string;
+      nome: string;
+      distrito_id: number;
+      distrito_codigo: string;
+      distrito: string;
+      situacao: string;
+      area_km2: number;
+    };
+    geometry: {
+      type: 'Polygon' | 'MultiPolygon';
+      coordinates: number[][][] | number[][][][];
+    };
+  }>;
+}
+
+export interface AvaliacaoPrevisaoOcorrencia {
+  dias_teste: number;
+  meses_teste: number;
+  amostras: number;
+  mae_modelo: number;
+  mae_referencia: number;
+  brier_modelo: number;
+  brier_referencia: number;
+  inicio: string;
+  fim: string;
+  series_por_area: Array<{
+    area_id: number;
+    pontos: Array<{
+      data: string;
+      previsto: number;
+      observado: number;
+      limite_inferior: number;
+      limite_superior: number;
+      probabilidade_grave: number;
+      grave_observada: boolean;
+    }>;
+  }>;
+}
+
+export interface PrevisaoOcorrencias {
+  status: 'ok' | 'sem_historico';
+  unidades: 'areas_agrupadas';
+  quantidade_areas: number;
+  quantidade_setores: number;
+  gerada_em: string;
+  inicio: string;
+  fim: string;
+  periodo_historico_semanas: number;
+  ocorrencias_historicas: number;
+  ocorrencias_fora_malha: number;
+  metodo: string;
+  areas: PrevisaoOcorrenciaArea[];
+  avaliacao: AvaliacaoPrevisaoOcorrencia | null;
+}
+
 export interface ManutencaoEquipamento {
   id: number;
   modalidade: 'preventiva' | 'corretiva';

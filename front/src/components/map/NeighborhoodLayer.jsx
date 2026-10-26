@@ -1,24 +1,25 @@
 import { useState } from 'react';
 import { GeoJSON } from 'react-leaflet';
-import bairrosDemo from '../../data/bairros-demo.json';
+
+const emptyGeoJson = { type: 'FeatureCollection', features: [] };
 
 function configureNeighborhoodTooltip(feature, layer, selectNeighborhood) {
-  const nome = feature?.properties?.nome || 'Setor demonstrativo';
-  layer.bindTooltip(`${nome} · limite aproximado`, {
+  const nome = feature?.properties?.nome || 'Setor censitário';
+  layer.bindTooltip(`${nome} · Malha IBGE 2022`, {
     sticky: true,
     className: 'neighborhood-boundary-tooltip',
   });
   layer.on('click', () => selectNeighborhood(feature.properties.id));
 }
 
-export default function NeighborhoodLayer({ enabled, dark = false }) {
+export default function NeighborhoodLayer({ enabled, dark = false, geoJson = null }) {
   const [setorSelecionadoId, setSetorSelecionadoId] = useState(null);
   if (!enabled) return null;
 
   return (
     <GeoJSON
-      key={`bairros-${setorSelecionadoId ?? 'nenhum'}`}
-      data={bairrosDemo}
+      key={`ibge-census-sectors-2022-${geoJson ? 'loaded' : 'pending'}`}
+      data={geoJson || emptyGeoJson}
       style={(feature) => {
         const selecionado = feature?.properties?.id === setorSelecionadoId;
         return {

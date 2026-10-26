@@ -8,6 +8,7 @@ import RoutesLayer from './map/RoutesLayer';
 import OccurrenceMarkers from './map/OccurrenceMarkers';
 import CoverageHeatLayer from './map/CoverageHeatLayer';
 import OccurrenceHeatLayer from './map/OccurrenceHeatLayer';
+import OccurrencePredictionLayer from './map/OccurrencePredictionLayer';
 import 'leaflet/dist/leaflet.css';
 import './Map.css';
 
@@ -36,6 +37,8 @@ export default function MapaMarilia({
   onSelectAgent,
   selecionadosIds = [],
   exibirContornoBairros = false,
+  censusSectorGeoJson,
+  predictionAreaGeoJson,
   temaEscuro = false,
   occurrences = [],
   showOccurrences = true,
@@ -47,6 +50,12 @@ export default function MapaMarilia({
   occurrenceHeatGrid,
   occurrenceHeatMode = 'quantidade',
   occurrenceHeatResolutionSummary,
+  occurrencePredictionEnabled = false,
+  occurrencePredictions = [],
+  occurrencePredictionMetric = 'quantidade',
+  selectedPredictionAreaId = /** @type {number | null} */ (null),
+  onSelectPredictionArea = /** @type {(areaId: number) => void} */ (() => {}),
+  occurrencePredictionGeneratedAt = '',
 }) {
   return (
     <MapContainer
@@ -60,7 +69,17 @@ export default function MapaMarilia({
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="&copy; OpenStreetMap contributors"
       />
-      <NeighborhoodLayer enabled={exibirContornoBairros} dark={temaEscuro} />
+      <NeighborhoodLayer enabled={exibirContornoBairros && !occurrencePredictionEnabled} dark={temaEscuro} geoJson={censusSectorGeoJson} />
+      <OccurrencePredictionLayer
+        enabled={occurrencePredictionEnabled}
+        areas={occurrencePredictions}
+        geoJson={predictionAreaGeoJson}
+        metric={occurrencePredictionMetric}
+        selectedAreaId={selectedPredictionAreaId}
+        onSelectArea={onSelectPredictionArea}
+        dark={temaEscuro}
+        generatedAt={occurrencePredictionGeneratedAt}
+      />
       <RoutesLayer rotas={rotas} />
       <CoverageHeatLayer
         enabled={coverageHeatEnabled}

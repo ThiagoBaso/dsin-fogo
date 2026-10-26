@@ -16,7 +16,7 @@ NOW = datetime.now().replace(microsecond=0)
 OCCURRENCE_TOTAL = 10_000
 OCCURRENCE_ACTIVE_TOTAL = 500
 OCCURRENCE_HISTORY_START = datetime(2024, 1, 1)
-DEMO_MAP_CENTER = (-49.950, -22.217)  # same center as generate_neighborhood_boundaries.py
+DEMO_MAP_CENTER = (-49.950, -22.217)  # Marília city center.
 DEMO_MAP_HALF_SPAN = 0.07
 OCCURRENCE_HOTSPOT_RADIUS_M = 2_500
 OCCURRENCE_RESOLUTION_SECTOR_FACTORS = (0.62, 1.55, 0.78, 1.72, 0.92, 1.28, 0.70)
@@ -1040,12 +1040,6 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         resolved = created + timedelta(hours=rng.randint(1, 72)) if rng.random() < .65 else None
         alerts.append((i, *targets, rng.choice(["manutenção", "ocorrência", "risco regional", "agente"]), rng.choice(["baixa", "media", "alta", "critica"]), "Alerta sintético de demonstração.", created, resolved))
     add("alertas", ["id_alerta", "id_equipamento", "id_agente", "id_ocorrencia", "id_regiao", "categoria", "severidade", "mensagem", "criado_em", "resolvido_em"], alerts)
-    forecasts = []
-    for i in range(1, 11):
-        risk = round(rng.uniform(5, 95), 2)
-        level = "baixo" if risk < 25 else "medio" if risk < 50 else "alto" if risk < 75 else "critico"
-        forecasts.append((i, i, NOW, NOW + timedelta(hours=24), risk, level, "padrão sintético horário/regional", NOW))
-    add("previsoes_risco", ["id_previsao", "id_regiao", "janela_inicio", "janela_fim", "indice_risco", "nivel_risco", "metodo", "gerada_em"], forecasts)
     sql.append("COMMIT;\n")
     temp_out = out.with_suffix(out.suffix + ".tmp")
     temp_out.write_text("\n".join(sql), encoding="utf-8")
