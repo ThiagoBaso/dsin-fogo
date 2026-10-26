@@ -59,6 +59,23 @@ test('spaces long-period date labels evenly while keeping the final month visibl
   expect(monthLabels).toHaveLength(6);
   expect(monthLabels[monthLabels.length - 1]).toBe('out/26');
   expect(monthLabels).not.toContain('ago/26');
+  expect(screen.queryByRole('img', { name: /Ocorrências acumuladas/ })).not.toBeInTheDocument();
+});
+
+test('keeps the selected metric chart outside the quantity mode', () => {
+  render(
+    <OccurrenceTrendsPanel
+      occurrences={[resolved]}
+      mode="gravidade"
+      period={{ mode: 'periodo', start: '2026-01-01T00:00', end: '2026-01-31T23:59' }}
+      selectedTypes={null}
+      selectedGravities={null}
+      loading={false}
+      error=""
+    />,
+  );
+
+  expect(screen.getByRole('img', { name: /Gravidade média/ })).toBeInTheDocument();
 });
 
 test('explains why current occurrences have no resolution trend', () => {

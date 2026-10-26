@@ -246,17 +246,19 @@ export default function OccurrenceTrendsPanel({
             unit="quantidade"
             colorClass="is-volume"
           />
-          <TrendChart
-            title={trends.metricTitle}
-            points={trends.metric}
-            unit={trends.metricUnit}
-            colorClass={mode === 'tempo_resolucao' ? 'is-resolution' : mode === 'recorrencia' ? 'is-recurrence' : 'is-metric'}
-            emptyMessage={mode === 'tempo_resolucao'
-              ? period.mode === 'atual'
-                ? 'O filtro Atuais contém apenas ocorrências abertas ou em atendimento. Escolha um período para analisar as resolvidas.'
-                : 'Não há ocorrências resolvidas nesse intervalo com os filtros atuais.'
-              : 'Sem dados para os filtros e período atuais.'}
-          />
+          {mode !== 'quantidade' && (
+            <TrendChart
+              title={trends.metricTitle}
+              points={trends.metric}
+              unit={trends.metricUnit}
+              colorClass={mode === 'tempo_resolucao' ? 'is-resolution' : mode === 'recorrencia' ? 'is-recurrence' : 'is-metric'}
+              emptyMessage={mode === 'tempo_resolucao'
+                ? period.mode === 'atual'
+                  ? 'O filtro Atuais contém apenas ocorrências abertas ou em atendimento. Escolha um período para analisar as resolvidas.'
+                  : 'Não há ocorrências resolvidas nesse intervalo com os filtros atuais.'
+                : 'Sem dados para os filtros e período atuais.'}
+            />
+          )}
           {mode === 'tempo_resolucao' && resolutionDataCount > 0 && (
             <p className="occurrence-trend-period">
               {resolutionDataCount.toLocaleString('pt-BR')} casos resolvidos; cada ponto usa a mediana dos encerrados naquele intervalo.
