@@ -102,6 +102,7 @@ test('renders occurrence heat separately and keeps filtered points when occurren
   const occurrenceFilters = container.querySelector('.equipment-occurrence-filters') as HTMLElement;
   fireEvent.click(within(occurrenceFilters).getByText('Ocorrências'));
   await waitFor(() => expect(mapProps().occurrenceHeatSources).toHaveLength(2));
+  expect(mapProps().occurrenceHeatPeriodDays).toBe(1);
   expect(mapProps().occurrences).toEqual([]);
   expect(mapProps().occurrenceHeatEnabled).toBe(false);
 
@@ -119,6 +120,11 @@ test('renders occurrence heat separately and keeps filtered points when occurren
   });
   expect(mapProps().occurrenceHeatMode).toBe('gravidade');
   expect(mapProps().occurrenceHeatSources.map((source: { severityWeight: number }) => source.severityWeight)).toEqual([4, 2]);
+
+  fireEvent.change(screen.getByLabelText('Visualizar mapa de calor de ocorrências por'), {
+    target: { value: 'recorrencia' },
+  });
+  expect(mapProps().occurrenceHeatMode).toBe('recorrencia');
 
   const visibility = within(container.querySelector('.map-selection-summary') as HTMLElement);
   fireEvent.click(visibility.getByLabelText('Exibir marcadores de ocorrências no mapa'));

@@ -46,6 +46,7 @@ export default function MapaMarilia({
   occurrenceHeatEnabled = false,
   occurrenceHeatSources = [],
   occurrenceHeatMode = 'quantidade',
+  occurrenceHeatPeriodDays = 1,
 }) {
   return (
     <MapContainer
@@ -69,6 +70,7 @@ export default function MapaMarilia({
         enabled={occurrenceHeatEnabled}
         sources={occurrenceHeatSources}
         mode={occurrenceHeatMode}
+        periodDays={occurrenceHeatPeriodDays}
       />
       <EquipmentMarkers
         pontos={pontos}

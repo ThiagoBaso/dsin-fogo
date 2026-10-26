@@ -9,7 +9,8 @@ import EquipmentDetails from './components/EquipmentDetails';
 import OccurrenceDetails from './components/OccurrenceDetails';
 import FilterPanel from './components/FilterPanel';
 import {
-  collectOccurrenceHeatSources, occurrenceSeverityGradient, OccurrenceHeatMode,
+  collectOccurrenceHeatSources, countOccurrencePeriodDays, occurrenceRecurrenceGradient,
+  occurrenceSeverityGradient, OccurrenceHeatMode,
 } from './components/map/occurrenceHeat';
 import {
   Aba,
@@ -321,6 +322,17 @@ function App() {
     (tiposOcorrenciaAplicados === null || tiposOcorrenciaAplicados.includes(ocorrencia.tipo))
       && (gravidadesOcorrenciaAplicadas === null || gravidadesOcorrenciaAplicadas.includes(ocorrencia.gravidade)),
   ), [ocorrencias, tiposOcorrenciaAplicados, gravidadesOcorrenciaAplicadas]);
+  const diasPeriodoRecorrencia = useMemo(() => {
+    if (periodoOcorrenciasAplicado.mode === 'periodo') {
+      return countOccurrencePeriodDays(periodoOcorrenciasAplicado.start, periodoOcorrenciasAplicado.end);
+    }
+    const occurrenceDays = ocorrencias
+      .map((ocorrencia) => ocorrencia.ocorrida_em.slice(0, 10))
+      .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day))
+      .sort();
+    if (!occurrenceDays.length) return 1;
+    return countOccurrencePeriodDays(occurrenceDays[0], occurrenceDays[occurrenceDays.length - 1]);
+  }, [ocorrencias, periodoOcorrenciasAplicado]);
   const ocorrenciasIncluidasMapa = useMemo(
     () => incluirOcorrenciasMapa ? ocorrenciasFiltradas : [],
     [incluirOcorrenciasMapa, ocorrenciasFiltradas],
@@ -680,6 +692,7 @@ function App() {
             occurrenceHeatEnabled={mapaCalorOcorrencias}
             occurrenceHeatSources={calorOcorrencias.sources}
             occurrenceHeatMode={modoCalorOcorrencias}
+            occurrenceHeatPeriodDays={diasPeriodoRecorrencia}
           />
           <div className="map-heat-control" role="group" aria-label="Filtros de mapa de calor">
             <strong>Mapa de calor</strong>
@@ -728,7 +741,8 @@ function App() {
                   >
                     <option value="quantidade">Quantidade</option>
                     <option value="gravidade">Gravidade</option>
-                    <option value="ambos">Ambos</option>
+                    <option value="ambos">Quantidade + gravidade</option>
+                    <option value="recorrencia">Recorrência</option>
                   </select>
                 </label>
                 <p className="map-heat-description" aria-live="polite">
@@ -738,21 +752,29 @@ function App() {
                   {modoCalorOcorrencias === 'quantidade' && 'As cores mais quentes indicam mais ocorrências.'}
                   {modoCalorOcorrencias === 'gravidade' && 'Cor indica gravidade média; opacidade acumula gravidade.'}
                   {modoCalorOcorrencias === 'ambos' && 'Cor indica gravidade; opacidade indica quantidade.'}
+                  {modoCalorOcorrencias === 'recorrencia' && `Percentual de dias do período (${diasPeriodoRecorrencia} dias) em que o mesmo tipo ocorreu em 350 m.`}
                 </p>
                 {calorOcorrencias.excludedCount > 0 && (
                   <p className="map-heat-description">{calorOcorrencias.excludedCount} sem coordenada válida.</p>
                 )}
                 <div className="map-heat-legend" aria-label="Escala de cores do mapa de calor de ocorrências">
-                  <span>{modoCalorOcorrencias === 'quantidade' ? 'Quantidade de ocorrências' : 'Gravidade média'}</span>
+                  <span>
+                    {modoCalorOcorrencias === 'quantidade' ? 'Quantidade de ocorrências'
+                      : modoCalorOcorrencias === 'recorrencia' ? '% de dias com o mesmo tipo'
+                        : 'Gravidade média'}
+                  </span>
                   <span
                     className="map-heat-legend-scale"
-                    style={{ background: modoCalorOcorrencias === 'quantidade' ? coverageGradient : occurrenceSeverityGradient }}
+                    style={{ background: modoCalorOcorrencias === 'quantidade' ? coverageGradient
+                      : modoCalorOcorrencias === 'recorrencia' ? occurrenceRecurrenceGradient : occurrenceSeverityGradient }}
                     aria-hidden="true"
                   />
                   <div>
                     {modoCalorOcorrencias === 'quantidade'
                       ? <><span>Menor</span><span>Maior</span></>
-                      : <><span>Baixa</span><span>Crítica</span></>}
+                      : modoCalorOcorrencias === 'recorrencia'
+                        ? <><span>0%</span><span>15%+</span></>
+                        : <><span>Baixa</span><span>Crítica</span></>}
                   </div>
                 </div>
               </>
