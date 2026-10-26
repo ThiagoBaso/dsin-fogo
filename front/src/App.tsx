@@ -7,6 +7,7 @@ import AgentList from './components/AgentList';
 import AgentDetails from './components/AgentDetails';
 import EquipmentDetails from './components/EquipmentDetails';
 import OccurrenceDetails from './components/OccurrenceDetails';
+import OccurrenceTrendsPanel from './components/OccurrenceTrendsPanel';
 import FilterPanel from './components/FilterPanel';
 import {
   buildOccurrenceHeatGrid, collectOccurrenceHeatSources, countOccurrencePeriodDays, occurrenceRecurrenceGradient,
@@ -21,6 +22,7 @@ import {
   AttributeFilterState,
   LocationFilters,
   OcorrenciaMapa,
+  OcorrenciaTendencia,
   Ponto,
   RotaVeiculo,
 } from './types';
@@ -101,6 +103,9 @@ function App() {
   const [erro, setErro] = useState('');
   const [erroRotas, setErroRotas] = useState('');
   const [ocorrencias, setOcorrencias] = useState<OcorrenciaMapa[]>([]);
+  const [ocorrenciasTendencia, setOcorrenciasTendencia] = useState<OcorrenciaTendencia[]>([]);
+  const [carregandoTendencias, setCarregandoTendencias] = useState(false);
+  const [erroTendencias, setErroTendencias] = useState('');
   const [tiposOcorrenciaSelecionados, setTiposOcorrenciaSelecionados] = useState<string[] | null>(null);
   const [tiposOcorrenciaAplicados, setTiposOcorrenciaAplicados] = useState<string[] | null>(null);
   const [gravidadesOcorrenciaSelecionadas, setGravidadesOcorrenciaSelecionadas] = useState<string[] | null>(null);
@@ -368,6 +373,7 @@ function App() {
     [mapaCalorOcorrencias, calorOcorrencias.sources, modoCalorOcorrencias, diasPeriodoRecorrencia],
   );
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
+  const mostrarTendenciasMapa = abaAtiva === 'mapa' && mapaCalorOcorrencias;
 
   function visualizarEquipamento(ponto: Ponto) {
     if (detalhesAgenteId !== null || ocorrenciaDetalhes !== null || detalhesId !== ponto.id) {
@@ -535,6 +541,43 @@ function App() {
 
     return () => controller.abort();
   }, [periodoOcorrenciasAplicado]);
+
+  useEffect(() => {
+    if (!mapaCalorOcorrencias) {
+      setOcorrenciasTendencia([]);
+      setCarregandoTendencias(false);
+      setErroTendencias('');
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const query = new URLSearchParams({ modo: periodoOcorrenciasAplicado.mode });
+    if (periodoOcorrenciasAplicado.mode === 'periodo') {
+      query.set('inicio', periodoOcorrenciasAplicado.start);
+      query.set('fim', periodoOcorrenciasAplicado.end);
+    }
+    setCarregandoTendencias(true);
+    setErroTendencias('');
+    fetch(`${process.env.REACT_APP_API_URL || ''}/api/ocorrencias/analise?${query.toString()}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+        return response.json() as Promise<OcorrenciaTendencia[]>;
+      })
+      .then((dados) => {
+        if (!controller.signal.aborted) setOcorrenciasTendencia(dados);
+      })
+      .catch((error: Error) => {
+        if (!controller.signal.aborted && error.name !== 'AbortError') {
+          setOcorrenciasTendencia([]);
+          setErroTendencias('Não foi possível carregar as tendências das ocorrências.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCarregandoTendencias(false);
+      });
+
+    return () => controller.abort();
+  }, [mapaCalorOcorrencias, periodoOcorrenciasAplicado]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -921,7 +964,25 @@ function App() {
           onToggleSelection={alternarSelecaoAgente}
         />
       </div>
-      <aside className='rigth-painel' aria-label={detalhesAgenteId !== null ? 'Informações do agente' : ocorrenciaDetalhes !== null ? 'Informações da ocorrência' : 'Informações do equipamento'} ref={painelDetalhes}>
+      <aside
+        className='rigth-painel'
+        aria-label={mostrarTendenciasMapa
+          ? 'Tendências do mapa e detalhes'
+          : detalhesAgenteId !== null ? 'Informações do agente'
+            : ocorrenciaDetalhes !== null ? 'Informações da ocorrência' : 'Informações do equipamento'}
+        ref={painelDetalhes}
+      >
+        {mostrarTendenciasMapa && (
+          <OccurrenceTrendsPanel
+            occurrences={ocorrenciasTendencia}
+            mode={modoCalorOcorrencias}
+            period={periodoOcorrenciasAplicado}
+            selectedTypes={tiposOcorrenciaAplicados}
+            selectedGravities={gravidadesOcorrenciaAplicadas}
+            loading={carregandoTendencias}
+            error={erroTendencias}
+          />
+        )}
         {detalhesAgenteId !== null
           ? <AgentDetails agente={agenteDetalhes} agentes={agentes} dark={tema === 'dark'} onDetailsReady={restaurarScrollDetalhes} onClose={() => setDetalhesAgenteId(null)} />
           : ocorrenciaDetalhes !== null
@@ -931,7 +992,8 @@ function App() {
               error={erroOcorrencias}
               onClose={() => setOcorrenciaDetalhes(null)}
             />
-            : <EquipmentDetails
+            : !mostrarTendenciasMapa || pontoDetalhes
+              ? <EquipmentDetails
             ponto={pontoDetalhes}
             dataHora={dataHoraAplicada}
             agentes={agentes}
@@ -939,7 +1001,8 @@ function App() {
             onDetailsReady={restaurarScrollDetalhes}
             onSelectAgent={visualizarAgente}
             onClose={() => setDetalhesId(null)}
-          />}
+                />
+              : null}
       </aside>
     </div>
   );

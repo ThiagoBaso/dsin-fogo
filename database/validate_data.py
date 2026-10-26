@@ -6,12 +6,14 @@ import os
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from statistics import median
 
-import mysql.connector
-
+try:
+    import mysql.connector
+except ModuleNotFoundError:
+    mysql = None
 
 def _parse_value_list(text: str):
     """Read the VALUES tuples emitted by generate_data.py without executing SQL."""
@@ -35,14 +37,19 @@ def _parse_value_list(text: str):
                     else: value.append(char)
                 row.append("".join(value))
             else:
-                start = i
-                while i < n and text[i] not in ",)": i += 1
-                raw = text[start:i].strip()
-                if raw == "NULL": value = None
-                elif re.fullmatch(r"-?\d+", raw): value = int(raw)
-                elif re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?", raw): value = float(raw)
-                else: raise ValueError(f"Unexpected SQL value {raw!r}")
-                row.append(value)
+                now_match = re.match(r"NOW\(\)", text[i:], re.IGNORECASE)
+                if now_match:
+                    row.append(datetime.now().replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S"))
+                    i += now_match.end()
+                else:
+                    start = i
+                    while i < n and text[i] not in ",)": i += 1
+                    raw = text[start:i].strip()
+                    if raw == "NULL": value = None
+                    elif re.fullmatch(r"-?\d+", raw): value = int(raw)
+                    elif re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+)(?:[eE][+-]?\d+)?", raw): value = float(raw)
+                    else: raise ValueError(f"Unexpected SQL value {raw!r}")
+                    row.append(value)
             while i < n and text[i] in " \r\n\t": i += 1
             if i < n and text[i] == ",": i += 1; continue
             if i < n and text[i] == ")": i += 1; break
@@ -70,11 +77,6 @@ def _statements(sql: str):
 
 def validate_seed(seed_path: Path, graph_path: Path) -> int:
     """Validate generated records and route geometries offline, without a DB connection."""
-    import networkx as nx
-    import osmnx as ox
-    from pyproj import Transformer
-    from shapely.geometry import LineString, Point
-
     sql = seed_path.read_text(encoding="utf-8")
     tables = {}
     pattern = re.compile(r"INSERT INTO `([^`]+)` \(([^)]*)\) VALUES\s*(.*);", re.S)
@@ -123,16 +125,16 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     migration_resolution_rows = []
     if resolution_migration_path.exists():
         resolution_sql = resolution_migration_path.read_text(encoding="utf-8")
-        resolution_match = re.search(
+        resolution_matches = re.finditer(
             r"INSERT INTO migration_occurrence_resolution\s*\(([^)]*)\) VALUES\s*(.*?);",
             resolution_sql,
             re.S,
         )
-        if resolution_match:
+        for resolution_match in resolution_matches:
             columns = re.findall(r"`([^`]+)`", resolution_match.group(1))
-            migration_resolution_rows = [
+            migration_resolution_rows.extend(
                 dict(zip(columns, row)) for row in _parse_value_list(resolution_match.group(2))
-            ]
+            )
     seed_occurrences_by_id = {row["id_ocorrencia"]: row for row in occurrences}
     resolution_migration_matches = (
         len(migration_resolution_rows) == len(occurrences)
@@ -288,10 +290,13 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
           all(occurrences_per_equipment[eid] >= 3 for eid in service_ids),
           f"{sum(occurrences_per_equipment[eid] >= 3 for eid in service_ids)}/{len(service_ids)} equipamentos completos")
     occurrence_dates = [datetime.fromisoformat(row["ocorrida_em"]) for row in occurrences]
+    latest_occurrence = max(occurrence_dates) if occurrence_dates else None
+    now = datetime.now()
     check("periodo de ocorrencias desde 2024",
           bool(occurrence_dates) and min(occurrence_dates) == datetime(2024, 1, 1)
-          and max(occurrence_dates) <= datetime.now(),
-          f"{min(occurrence_dates) if occurrence_dates else 'sem datas'} a {max(occurrence_dates) if occurrence_dates else 'sem datas'}")
+          and latest_occurrence is not None and latest_occurrence.date() == date.today()
+          and latest_occurrence <= now,
+          f"{min(occurrence_dates) if occurrence_dates else 'sem datas'} a {latest_occurrence or 'sem datas'}")
     current_occurrences = [row for row in occurrences if row["status"] in ("aberta", "em_atendimento")]
     check("500 ocorrencias abertas ou em atendimento",
           len(current_occurrences) == 500
@@ -301,14 +306,18 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     occurrence_locations = {row["id_localizacao"]: row for row in tables["localizacoes"]}
     incidents_per_location = defaultdict(int)
     severity_by_grid = defaultdict(list)
+    severity_by_month = defaultdict(list)
     resolution_hours_by_grid = defaultdict(list)
+    resolution_hours_by_month = defaultdict(list)
     resolution_timestamps_valid = True
     severity_score = {"baixa": 1, "media": 2, "alta": 3, "critica": 4}
     for occurrence in occurrences:
         incidents_per_location[occurrence["id_localizacao"]] += 1
         place = occurrence_locations[occurrence["id_localizacao"]]
         cell = (round(place["latitude"], 2), round(place["longitude"], 2))
-        severity_by_grid[cell].append(severity_score[occurrence["gravidade"]])
+        score = severity_score[occurrence["gravidade"]]
+        severity_by_grid[cell].append(score)
+        severity_by_month[occurrence["ocorrida_em"][:7]].append(score)
         resolution = occurrence.get("resolvida_em")
         if occurrence["status"] == "resolvida":
             if resolution is None:
@@ -319,7 +328,9 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
             if resolved_at <= occurred_at or resolved_at > datetime.now():
                 resolution_timestamps_valid = False
                 continue
-            resolution_hours_by_grid[cell].append((resolved_at - occurred_at).total_seconds() / 3600)
+            resolution_hours = (resolved_at - occurred_at).total_seconds() / 3600
+            resolution_hours_by_grid[cell].append(resolution_hours)
+            resolution_hours_by_month[resolution[:7]].append(resolution_hours)
         elif resolution is not None:
             resolution_timestamps_valid = False
     check("datas de resolucao coerentes com o status",
@@ -330,6 +341,20 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     check("tempos de resolucao variam entre areas",
           len(regional_medians) >= 3 and resolution_spread >= 1.5,
           f"{len(regional_medians)} areas com 40+ casos; mediana max/min {resolution_spread:.2f}x")
+    monthly_severity_means = [
+        sum(scores) / len(scores) for scores in severity_by_month.values() if len(scores) >= 80
+    ]
+    monthly_severity_spread = max(monthly_severity_means, default=0) - min(monthly_severity_means, default=0)
+    check("gravidade varia ao longo dos meses",
+          len(monthly_severity_means) >= 20 and monthly_severity_spread >= 0.55,
+          f"{len(monthly_severity_means)} meses com 80+ casos; amplitude media {monthly_severity_spread:.2f}/3")
+    monthly_resolution_medians = [
+        median(hours) for hours in resolution_hours_by_month.values() if len(hours) >= 40
+    ]
+    monthly_resolution_spread = max(monthly_resolution_medians, default=0) / min(monthly_resolution_medians, default=1)
+    check("tempos de resolucao variam ao longo dos meses",
+          len(monthly_resolution_medians) >= 20 and monthly_resolution_spread >= 1.8,
+          f"{len(monthly_resolution_medians)} meses com 40+ casos; mediana max/min {monthly_resolution_spread:.2f}x")
     top_location_count = max(1, len(incidents_per_location) // 10)
     top_location_share = sum(sorted(incidents_per_location.values(), reverse=True)[:top_location_count]) / max(1, len(occurrences))
     check("concentracao geografica de ocorrencias",
@@ -474,16 +499,21 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
             chronology_ok = False; break
     check("ordem cronológica e início/fim GPS", chronology_ok, "conferido em todas as viagens")
 
-    graph = ox.load_graphml(graph_path)
-    coords = [(r["longitude"], r["latitude"]) for r in tables["posicoes_equipamento"] if r["id_viagem"] is not None]
-    min_lat = min(lat for _, lat in coords); max_lat = max(lat for _, lat in coords)
-    min_lon = min(lon for lon, _ in coords); max_lon = max(lon for lon, _ in coords)
-    edge_bounds = []
-    for u, v, key, data in graph.edges(keys=True, data=True):
-        geom = data.get("geometry")
-        edge_bounds.append(geom.bounds if geom is not None else (graph.nodes[u]["x"], graph.nodes[u]["y"], graph.nodes[v]["x"], graph.nodes[v]["y"]))
-    bounds_ok = min_lat >= min(b[1] for b in edge_bounds) - 1e-6 and max_lat <= max(b[3] for b in edge_bounds) + 1e-6 and min_lon >= min(b[0] for b in edge_bounds) - 1e-6 and max_lon <= max(b[2] for b in edge_bounds) + 1e-6
-    check("GPS positions fall within the OSM graph bounds", bounds_ok, f"lat {min_lat:.5f}..{max_lat:.5f}, lon {min_lon:.5f}..{max_lon:.5f}")
+    try:
+        import osmnx as ox
+    except ModuleNotFoundError:
+        print("SKIP limites do grafo OSM: instale as dependências de database/requirements.txt")
+    else:
+        graph = ox.load_graphml(graph_path)
+        coords = [(r["longitude"], r["latitude"]) for r in tables["posicoes_equipamento"] if r["id_viagem"] is not None]
+        min_lat = min(lat for _, lat in coords); max_lat = max(lat for _, lat in coords)
+        min_lon = min(lon for lon, _ in coords); max_lon = max(lon for lon, _ in coords)
+        edge_bounds = []
+        for u, v, key, data in graph.edges(keys=True, data=True):
+            geom = data.get("geometry")
+            edge_bounds.append(geom.bounds if geom is not None else (graph.nodes[u]["x"], graph.nodes[u]["y"], graph.nodes[v]["x"], graph.nodes[v]["y"]))
+        bounds_ok = min_lat >= min(b[1] for b in edge_bounds) - 1e-6 and max_lat <= max(b[3] for b in edge_bounds) + 1e-6 and min_lon >= min(b[0] for b in edge_bounds) - 1e-6 and max_lon <= max(b[2] for b in edge_bounds) + 1e-6
+        check("GPS positions fall within the OSM graph bounds", bounds_ok, f"lat {min_lat:.5f}..{max_lat:.5f}, lon {min_lon:.5f}..{max_lon:.5f}")
     for label, ok, detail in checks:
         print(f"{'PASS' if ok else 'FAIL'} {label}: {detail}")
     return 0 if all(ok for _, ok, _ in checks) else 1
@@ -499,6 +529,10 @@ def main() -> int:
     if not os.getenv("MYSQL_USER"):
         print("Defina MYSQL_USER e as demais variáveis MYSQL_* antes de executar a validação.", file=sys.stderr)
         return 2
+    if mysql is None:
+        print("Instale mysql-connector-python para validar uma base MySQL.", file=sys.stderr)
+        return 2
+
     connection = mysql.connector.connect(
         host=os.getenv("MYSQL_HOST", "127.0.0.1"),
         port=int(os.getenv("MYSQL_PORT", "3306")),
@@ -558,17 +592,21 @@ def main() -> int:
                    ">= 3 áreas e >= 1.5x"))
     check("alertas", "SELECT COUNT(*) FROM alertas", lambda n: n >= 250, ">= 250")
     check("viagens com ao menos 120 posições", "SELECT COUNT(*) FROM (SELECT id_viagem FROM posicoes_equipamento WHERE id_viagem IS NOT NULL GROUP BY id_viagem HAVING COUNT(*) >= 120) q", lambda n: n >= 240, ">= 240 viagens")
-    import osmnx as ox
-    road_graph = ox.load_graphml(args.graph)
-    edge_bounds = []
-    for u,v,key,data in road_graph.edges(keys=True, data=True):
-        geom = data.get("geometry")
-        edge_bounds.append(geom.bounds if geom is not None else (road_graph.nodes[u]["x"], road_graph.nodes[u]["y"], road_graph.nodes[v]["x"], road_graph.nodes[v]["y"]))
-    min_lon = min(b[0] for b in edge_bounds); min_lat = min(b[1] for b in edge_bounds)
-    max_lon = max(b[2] for b in edge_bounds); max_lat = max(b[3] for b in edge_bounds)
-    cursor.execute("SELECT COUNT(*) FROM localizacoes WHERE latitude NOT BETWEEN %s AND %s OR longitude NOT BETWEEN %s AND %s", (min_lat, max_lat, min_lon, max_lon))
-    outside = cursor.fetchone()[0]
-    checks.append(("coordenadas locais dentro dos limites do grafo OSM", outside == 0, outside, "0 fora da área"))
+    try:
+        import osmnx as ox
+    except ModuleNotFoundError:
+        print("SKIP limites do grafo OSM: instale as dependências de database/requirements.txt")
+    else:
+        road_graph = ox.load_graphml(args.graph)
+        edge_bounds = []
+        for u,v,key,data in road_graph.edges(keys=True, data=True):
+            geom = data.get("geometry")
+            edge_bounds.append(geom.bounds if geom is not None else (road_graph.nodes[u]["x"], road_graph.nodes[u]["y"], road_graph.nodes[v]["x"], road_graph.nodes[v]["y"]))
+        min_lon = min(b[0] for b in edge_bounds); min_lat = min(b[1] for b in edge_bounds)
+        max_lon = max(b[2] for b in edge_bounds); max_lat = max(b[3] for b in edge_bounds)
+        cursor.execute("SELECT COUNT(*) FROM localizacoes WHERE latitude NOT BETWEEN %s AND %s OR longitude NOT BETWEEN %s AND %s", (min_lat, max_lat, min_lon, max_lon))
+        outside = cursor.fetchone()[0]
+        checks.append(("coordenadas locais dentro dos limites do grafo OSM", outside == 0, outside, "0 fora da área"))
     check("posições fora de ordem cronológica", "SELECT COUNT(*) FROM (SELECT registrado_em, LAG(registrado_em) OVER (PARTITION BY id_viagem ORDER BY id_posicao) AS anterior FROM posicoes_equipamento WHERE id_viagem IS NOT NULL) p WHERE anterior > registrado_em", lambda n: n == 0, "0")
     check("referências órfãs", "SELECT SUM(n) FROM (SELECT COUNT(*) n FROM equipamentos e LEFT JOIN tipos_equipamento t USING(id_tipo) WHERE t.id_tipo IS NULL UNION ALL SELECT COUNT(*) FROM equipamentos e LEFT JOIN orgaos o USING(id_orgao) WHERE o.id_orgao IS NULL UNION ALL SELECT COUNT(*) FROM equipamentos e LEFT JOIN localizacoes l USING(id_localizacao) WHERE e.id_localizacao IS NOT NULL AND l.id_localizacao IS NULL UNION ALL SELECT COUNT(*) FROM equipamentos e LEFT JOIN situacoes_equipamento s USING(id_situacao) WHERE s.id_situacao IS NULL UNION ALL SELECT COUNT(*) FROM posicoes_equipamento p LEFT JOIN viagens v USING(id_viagem) WHERE p.id_viagem IS NOT NULL AND v.id_viagem IS NULL UNION ALL SELECT COUNT(*) FROM viagens v LEFT JOIN equipamentos e USING(id_equipamento) WHERE e.id_equipamento IS NULL) refs", lambda n: (n or 0) == 0, "0")
     check("atributos incompatíveis com tipo de equipamento", "SELECT COUNT(*) FROM valores_atributo v JOIN equipamentos e USING(id_equipamento) JOIN atributos_tipo a USING(id_atributo) WHERE e.id_tipo <> a.id_tipo", lambda n: n == 0, "0")
@@ -586,6 +624,8 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except mysql.connector.Error as exc:
+    except Exception as exc:
+        if mysql is None or not isinstance(exc, mysql.connector.Error):
+            raise
         print(f"Não foi possível validar o MySQL: {exc}", file=sys.stderr)
         raise SystemExit(2)

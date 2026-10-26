@@ -817,6 +817,110 @@
   color: var(--dsin-text);
 }
 
+.occurrence-trends {
+  margin: 0 0 20px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--dsin-border);
+  color: var(--dsin-text);
+}
+
+.occurrence-trends-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.occurrence-trends-heading h2 {
+  margin: 0;
+  color: var(--dsin-ink);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.occurrence-trends-heading p,
+.occurrence-trend-period,
+.occurrence-trend-footnote {
+  margin: 4px 0 0;
+  color: var(--dsin-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.occurrence-trend-chart {
+  min-width: 0;
+  margin-top: 14px;
+}
+
+.occurrence-trend-chart h3 {
+  margin: 0 0 4px;
+  color: var(--dsin-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.occurrence-trend-plot {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.occurrence-trend-gridline {
+  stroke: var(--dsin-border);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.occurrence-trend-axis-label {
+  fill: var(--dsin-muted);
+  font-family: inherit;
+  font-size: 9px;
+}
+
+.occurrence-trend-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.occurrence-trend-line.is-volume,
+.occurrence-trend-point.is-volume { stroke: var(--dsin-chart-volume); }
+.occurrence-trend-line.is-metric,
+.occurrence-trend-point.is-metric { stroke: var(--dsin-chart-metric); }
+.occurrence-trend-line.is-recurrence,
+.occurrence-trend-point.is-recurrence { stroke: var(--dsin-chart-recurrence); }
+.occurrence-trend-line.is-resolution,
+.occurrence-trend-point.is-resolution { stroke: var(--dsin-chart-resolution); }
+
+.occurrence-trend-point {
+  fill: var(--dsin-surface);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.occurrence-trend-comparison {
+  margin: 4px 0 0;
+  color: var(--dsin-text);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.occurrence-trend-empty,
+.occurrence-trend-state {
+  margin: 10px 0;
+  color: var(--dsin-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.occurrence-trend-state.is-error { color: var(--dsin-danger-ink); }
+
 .equipment-details-heading {
   display: flex;
   align-items: flex-start;

@@ -109,6 +109,7 @@ test('renders occurrence heat separately and keeps filtered points when occurren
 
   fireEvent.click(screen.getByLabelText('Aplicar mapa de calor de ocorrências'));
   await waitFor(() => expect(mapProps().occurrenceHeatGrid?.countValues).toBeDefined());
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Tendência do mapa' })).toBeInTheDocument());
   expect(mapProps().coverageHeatEnabled).toBe(false);
   expect(mapProps().occurrenceHeatEnabled).toBe(true);
   expect(mapProps().occurrenceHeatMode).toBe('quantidade');

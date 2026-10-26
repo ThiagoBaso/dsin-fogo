@@ -137,9 +137,38 @@ def random_datetime(rng, start, end):
     return start + timedelta(seconds=rng.randint(0, span_seconds))
 
 
+def occurrence_severity_pressure(occurred):
+    """Model recurring low/high-risk periods across the synthetic history."""
+    elapsed_days = max(0, (occurred - OCCURRENCE_HISTORY_START).total_seconds() / 86400)
+    annual_wave = math.sin(2 * math.pi * elapsed_days / 480 - 0.65)
+    seasonal_wave = math.sin(2 * math.pi * elapsed_days / 185 + 0.4)
+    return 0.72 * annual_wave + 0.28 * seasonal_wave
+
+
+def adjust_occurrence_severity(seed, occurrence_id, occurred, severity):
+    """Shift a portion of events up or down during synthetic risk waves."""
+    score = {"baixa": 1, "media": 2, "alta": 3, "critica": 4}[severity]
+    pressure = occurrence_severity_pressure(occurred)
+    if pressure == 0:
+        return severity
+    variation_rng = random.Random((seed * 1_000_003) ^ (occurrence_id * 0x9E3779B1))
+    shift_probability = min(0.72, abs(pressure) * 0.72)
+    if variation_rng.random() < shift_probability:
+        score = min(4, score + 1) if pressure > 0 else max(1, score - 1)
+    return ("baixa", "media", "alta", "critica")[score - 1]
+
+
+def occurrence_response_factor(occurred):
+    """Add synthetic staffing and workload waves to resolution times."""
+    elapsed_days = max(0, (occurred - OCCURRENCE_HISTORY_START).total_seconds() / 86400)
+    annual_pressure = math.sin(2 * math.pi * elapsed_days / 510 + 0.5)
+    seasonal_pressure = math.sin(2 * math.pi * elapsed_days / 200 - 0.5)
+    return math.exp(0.55 * annual_pressure + 0.20 * seasonal_pressure)
+
+
 def occurrence_resolution_duration_seconds(seed, occurrence_id, location, hotspots,
                                            occurrence_type, severity, occurred):
-    """Create a reproducible duration with persistent differences between service sectors."""
+    """Create reproducible resolution times that vary by area and across periods."""
     sector_index = min(
         range(len(hotspots)),
         key=lambda index: haversine_m(location, (hotspots[index][0], hotspots[index][1])),
@@ -153,7 +182,11 @@ def occurrence_resolution_duration_seconds(seed, occurrence_id, location, hotspo
     schedule_factor = 1.12 if outside_business_hours else 1.0
     duration_rng = random.Random((seed * 1_000_003) ^ (occurrence_id * 0x9E3779B1))
     variation = duration_rng.lognormvariate(0, 0.42)
-    duration_seconds = round(base_minutes * severity_factor * sector_factor * schedule_factor * variation * 60)
+    temporal_factor = occurrence_response_factor(occurred)
+    duration_seconds = round(
+        base_minutes * severity_factor * sector_factor * schedule_factor
+        * temporal_factor * variation * 60
+    )
     return min(max(duration_seconds, 60), 14 * 24 * 60 * 60)
 
 
@@ -183,8 +216,14 @@ def occurrence_migration_sql(occurrences):
     return (
         "-- Idempotently add the historical demo occurrences missing from persistent volumes.\n"
         "-- New databases already receive these rows from seed.sql.\n"
+        "SET time_zone = '-03:00';\n"
         "START TRANSACTION;\n"
         + rows_sql
+        + "UPDATE `ocorrencias`\n"
+        + "SET `ocorrida_em` = NOW()\n"
+        + "WHERE `id_ocorrencia` = 1\n"
+        + "  AND `status` IN ('aberta', 'em_atendimento')\n"
+        + "  AND `descricao` = 'Evento fictício vinculado ao equipamento para demonstração.';\n"
         + "COMMIT;\n"
     )
 
@@ -198,6 +237,7 @@ def occurrence_resolution_migration_sql(occurrences, location_coords, hotspots, 
         )
         rows.append((row[0], row[1], row[2], row[3], row[5], duration_seconds))
     schema_migration = """-- Add simulated resolution dates to generated demo occurrences only.
+SET time_zone = '-03:00';
 DROP PROCEDURE IF EXISTS migrate_occurrence_resolution_schema;
 DELIMITER //
 CREATE PROCEDURE migrate_occurrence_resolution_schema()
@@ -231,20 +271,10 @@ CREATE TEMPORARY TABLE migration_occurrence_resolution (
     update = """UPDATE ocorrencias AS occurrence
 JOIN migration_occurrence_resolution AS resolution_source
   ON resolution_source.id_ocorrencia = occurrence.id_ocorrencia
- AND resolution_source.id_localizacao = occurrence.id_localizacao
- AND resolution_source.id_orgao = occurrence.id_orgao
- AND resolution_source.id_equipamento <=> occurrence.id_equipamento
- AND resolution_source.gravidade = occurrence.gravidade
-SET occurrence.resolvida_em = LEAST(
-  TIMESTAMPADD(SECOND, resolution_source.duracao_segundos, occurrence.ocorrida_em), NOW()
-)
-WHERE occurrence.status = 'resolvida'
-  AND occurrence.resolvida_em IS NULL
-  AND occurrence.descricao LIKE 'Evento fict%'
-  AND occurrence.ocorrida_em < NOW()
-  AND resolution_source.duracao_segundos > 0;
+SET occurrence.gravidade = resolution_source.gravidade
+WHERE occurrence.id_ocorrencia <= 10000
+  AND occurrence.descricao LIKE 'Evento fict%';
 
--- Older demo volumes may have changed generated attributes; their synthetic description and ID still identify them.
 UPDATE ocorrencias AS occurrence
 JOIN migration_occurrence_resolution AS resolution_source
   ON resolution_source.id_ocorrencia = occurrence.id_ocorrencia
@@ -252,7 +282,6 @@ SET occurrence.resolvida_em = LEAST(
   TIMESTAMPADD(SECOND, resolution_source.duracao_segundos, occurrence.ocorrida_em), NOW()
 )
 WHERE occurrence.status = 'resolvida'
-  AND occurrence.resolvida_em IS NULL
   AND occurrence.descricao LIKE 'Evento fict%'
   AND occurrence.ocorrida_em < NOW()
   AND resolution_source.duracao_segundos > 0;
@@ -896,6 +925,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     occurrence_coords, map_location_ids, hotspots, hotspot_profiles, hotspot_candidates = occurrence_hotspots(locations)
     active_start = max(OCCURRENCE_HISTORY_START, NOW - timedelta(days=60))
     active_status_index = 0
+    current_occurrence_created = False
 
     def context_for_random_occurrence():
         if rng.random() < 0.18:
@@ -924,8 +954,11 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
 
     def add_occurrence(location_id, org_id, equip_id, active, description, fixed_location=False,
                        force_start=False, force_now=False):
-        nonlocal active_status_index
+        nonlocal active_status_index, current_occurrence_created
         occurrence_id = len(occurrences) + 1
+        if active and not current_occurrence_created:
+            force_now = True
+            current_occurrence_created = True
         if fixed_location:
             profile = context_for_location(location_id)
         else:
@@ -943,6 +976,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             occurred = NOW
         occurrence_type = rng.choices(occurrence_types, profile["types"], k=1)[0]
         severity = rng.choices(severities, profile["severity"], k=1)[0]
+        severity = adjust_occurrence_severity(seed, occurrence_id, occurred, severity)
         if status == "resolvida" and occurred >= NOW:
             occurred = NOW - timedelta(minutes=1)
         resolved = occurrence_resolution_datetime(
@@ -985,7 +1019,6 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
         add_occurrence(
             0, rng.randint(1, 4), equip_id, True,
             "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.",
-            force_now=(len(occurrences) == len(priority_equipment_ids) * 3),
         )
 
     remaining_historical = OCCURRENCE_TOTAL - len(occurrences)
@@ -995,6 +1028,8 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             0, rng.randint(1, 4), equip_id, False,
             "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.",
         )
+    if not current_occurrence_created or max(row[8] for row in occurrences) < NOW.replace(hour=0, minute=0, second=0):
+        raise RuntimeError("Occurrence generation did not reach the current date")
     add("ocorrencias", ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em", "resolvida_em"], occurrences)
     alerts = []
     for i in range(1, 251):

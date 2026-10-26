@@ -147,6 +147,17 @@ export interface OcorrenciaMapa extends OcorrenciaEquipamento {
   equipamento_nome: string | null;
 }
 
+export interface OcorrenciaTendencia {
+  id: number;
+  tipo: string;
+  gravidade: OcorrenciaEquipamento['gravidade'];
+  status: OcorrenciaEquipamento['status'];
+  ocorrida_em: string;
+  resolvida_em: string | null;
+  latitude: number;
+  longitude: number;
+}
+
 export interface ManutencaoEquipamento {
   id: number;
   modalidade: 'preventiva' | 'corretiva';

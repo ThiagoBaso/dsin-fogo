@@ -43,6 +43,10 @@
   --occurrence-map-medium: var(--status-maintenance-text);
   --occurrence-map-high: #ea580c;
   --occurrence-map-critical: var(--status-stolen-text);
+  --dsin-chart-volume: #2563eb;
+  --dsin-chart-metric: #c2410c;
+  --dsin-chart-recurrence: #7c3aed;
+  --dsin-chart-resolution: #b91c1c;
 }
 
 :root[data-theme='dark'] {
@@ -88,6 +92,10 @@
   --occurrence-map-medium: #c19413;
   --occurrence-map-high: #b85017;
   --occurrence-map-critical: #b83b42;
+  --dsin-chart-volume: #60a5fa;
+  --dsin-chart-metric: #fb923c;
+  --dsin-chart-recurrence: #c4b5fd;
+  --dsin-chart-resolution: #f87171;
 }
 
 body {
