@@ -31,6 +31,11 @@ test('shows interval volume and the resolution metric with a period comparison',
   expect(screen.getByRole('img', { name: /Mediana do tempo de resolução/ })).toBeInTheDocument();
   expect(screen.getByText(/Casos agrupados pela data de resolução/)).toBeInTheDocument();
   expect(screen.getByText(/resolução mais lenta/)).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Ocorrências contabilizadas' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Por tipo' })).toHaveTextContent('Incêndio');
+  expect(screen.getByRole('region', { name: 'Por gravidade' })).toHaveTextContent('Alta');
+  expect(screen.getByText('Por data da ocorrência, considerando os filtros atuais.')).toBeInTheDocument();
+  expect(screen.getByText(/O gráfico de resolução agrupa casos pela data em que foram resolvidos/)).toBeInTheDocument();
 });
 
 test('spaces long-period date labels evenly while keeping the final month visible', () => {

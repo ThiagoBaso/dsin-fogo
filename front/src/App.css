@@ -921,6 +921,132 @@
 
 .occurrence-trend-state.is-error { color: var(--dsin-danger-ink); }
 
+.occurrence-trend-breakdown {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--dsin-border);
+}
+
+.occurrence-trend-breakdown-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.occurrence-trend-breakdown-heading h3 {
+  margin: 0;
+  color: var(--dsin-ink);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.occurrence-trend-breakdown-heading p,
+.occurrence-trend-breakdown-note {
+  margin: 3px 0 0;
+  color: var(--dsin-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.occurrence-trend-breakdown-heading > strong {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid var(--dsin-yellow-border);
+  border-radius: 999px;
+  background: var(--dsin-yellow-soft);
+  color: var(--dsin-ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.occurrence-trend-breakdown-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 9px;
+}
+
+.occurrence-trend-breakdown-group {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--dsin-border);
+  border-radius: 10px;
+  background: var(--dsin-panel-muted);
+}
+
+.occurrence-trend-breakdown-group h4 {
+  margin: 0 0 8px;
+  color: var(--dsin-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.occurrence-trend-breakdown-group ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.occurrence-trend-breakdown-group li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+  color: var(--dsin-text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.occurrence-trend-breakdown-label {
+  overflow-wrap: anywhere;
+}
+
+.occurrence-trend-breakdown-group li strong {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--dsin-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.occurrence-trend-breakdown-group li small {
+  color: var(--dsin-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.occurrence-trend-breakdown-bar {
+  grid-column: 1 / -1;
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--dsin-neutral-soft);
+}
+
+.occurrence-trend-breakdown-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dsin-chart-volume);
+}
+
+.occurrence-trend-breakdown-empty {
+  margin: 0;
+  color: var(--dsin-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.occurrence-trend-breakdown-note {
+  margin-top: 8px;
+}
+
 .equipment-details-heading {
   display: flex;
   align-items: flex-start;

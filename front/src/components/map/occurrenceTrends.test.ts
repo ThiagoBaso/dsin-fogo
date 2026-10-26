@@ -64,6 +64,47 @@ test('groups resolution medians by resolution date, including cases opened befor
   expect(trends.metric.find((point) => point.label === '20/01')?.value).toBe(240);
 });
 
+test('breaks down occurrences by type and severity using their occurrence dates', () => {
+  const records = [
+    occurrence({
+      id: 1,
+      tipo: 'Trânsito',
+      gravidade: 'baixa',
+      ocorrida_em: '2025-12-29T08:00:00',
+      resolvida_em: '2026-01-02T08:00:00',
+    }),
+    occurrence({
+      id: 2,
+      tipo: 'trânsito',
+      gravidade: 'alta',
+      ocorrida_em: '2026-01-10T08:00:00',
+      resolvida_em: '2026-01-20T08:00:00',
+    }),
+    occurrence({
+      id: 3,
+      tipo: 'Incêndio',
+      gravidade: 'critica',
+      status: 'em_atendimento',
+      ocorrida_em: '2026-01-15T08:00:00',
+      resolvida_em: null,
+    }),
+  ];
+  const trends = buildOccurrenceTrends(records, 'tempo_resolucao', {
+    mode: 'periodo', start: '2026-01-01T00:00', end: '2026-01-31T23:59',
+  })!;
+
+  expect(trends.totalOccurrences).toBe(2);
+  expect(trends.byType).toEqual([
+    { label: 'Incêndio', count: 1 },
+    { label: 'Trânsito', count: 1 },
+  ]);
+  expect(trends.bySeverity).toEqual([
+    { label: 'Crítica', count: 1 },
+    { label: 'Alta', count: 1 },
+  ]);
+  expect(trends.metric.reduce((total, point) => total + point.count, 0)).toBe(2);
+});
+
 test('counts recurring events only for the same type and nearby places on different days', () => {
   const records = [
     occurrence({ id: 1, ocorrida_em: '2026-01-01T08:00:00' }),

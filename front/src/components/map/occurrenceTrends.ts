@@ -13,6 +13,11 @@ export interface OccurrenceTrendPoint {
   complete: boolean;
 }
 
+export interface OccurrenceTrendBreakdownEntry {
+  label: string;
+  count: number;
+}
+
 export interface OccurrenceTrendSeries {
   granularity: OccurrenceTrendGranularity;
   volume: OccurrenceTrendPoint[];
@@ -22,6 +27,8 @@ export interface OccurrenceTrendSeries {
   startLabel: string;
   endLabel: string;
   totalOccurrences: number;
+  byType: OccurrenceTrendBreakdownEntry[];
+  bySeverity: OccurrenceTrendBreakdownEntry[];
 }
 
 interface TrendPeriod {
@@ -35,6 +42,19 @@ const severityWeight: Record<OcorrenciaTendencia['gravidade'], number> = {
   media: 2,
   alta: 3,
   critica: 4,
+};
+
+const severityLabel: Record<OcorrenciaTendencia['gravidade'], string> = {
+  baixa: 'Baixa',
+  media: 'Média',
+  alta: 'Alta',
+  critica: 'Crítica',
+};
+const severityDisplayOrder: Record<string, number> = {
+  Crítica: 4,
+  Alta: 3,
+  Média: 2,
+  Baixa: 1,
 };
 
 function parseDay(value: string | null | undefined) {
@@ -116,6 +136,22 @@ function median(values: number[]) {
   return ordered.length % 2
     ? ordered[middle]
     : (ordered[middle - 1] + ordered[middle]) / 2;
+}
+
+function occurrenceBreakdown(
+  occurrences: OcorrenciaTendencia[],
+  getLabel: (occurrence: OcorrenciaTendencia) => string,
+  compare?: (left: OccurrenceTrendBreakdownEntry, right: OccurrenceTrendBreakdownEntry) => number,
+) {
+  const counts = new Map<string, number>();
+  occurrences.forEach((occurrence) => {
+    const label = getLabel(occurrence);
+    counts.set(label, (counts.get(label) || 0) + 1);
+  });
+  const entries = Array.from(counts.entries()).map(([label, count]) => ({ label, count }));
+  return entries.sort(compare || ((left, right) => (
+    right.count - left.count || left.label.localeCompare(right.label, 'pt-BR')
+  )));
 }
 
 function recurringOccurrenceIds(occurrences: OcorrenciaTendencia[], start: Date, end: Date) {
@@ -289,5 +325,14 @@ export function buildOccurrenceTrends(
     startLabel: formatFullDate(start),
     endLabel: formatFullDate(end),
     totalOccurrences: occurredInPeriod.length,
+    byType: occurrenceBreakdown(occurredInPeriod, (occurrence) => {
+      const type = occurrence.tipo.trim();
+      return type ? type[0].toLocaleUpperCase('pt-BR') + type.slice(1) : 'Sem tipo';
+    }),
+    bySeverity: occurrenceBreakdown(
+      occurredInPeriod,
+      (occurrence) => severityLabel[occurrence.gravidade],
+      (left, right) => severityDisplayOrder[right.label] - severityDisplayOrder[left.label],
+    ),
   };
 }

@@ -160,6 +160,43 @@ function TrendChart({
   );
 }
 
+function OccurrenceBreakdownGroup({
+  title,
+  entries,
+  total,
+}: {
+  title: string;
+  entries: Array<{ label: string; count: number }>;
+  total: number;
+}) {
+  return (
+    <section className="occurrence-trend-breakdown-group" aria-label={title}>
+      <h4>{title}</h4>
+      {entries.length > 0 ? (
+        <ul>
+          {entries.map((entry) => {
+            const percentage = total > 0 ? entry.count / total * 100 : 0;
+            return (
+              <li key={entry.label}>
+                <span className="occurrence-trend-breakdown-label">{entry.label}</span>
+                <strong>
+                  {entry.count.toLocaleString('pt-BR')}
+                  <small>{percentage.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</small>
+                </strong>
+                <span className="occurrence-trend-breakdown-bar" aria-hidden="true">
+                  <span style={{ width: `${percentage}%` }} />
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="occurrence-trend-breakdown-empty">Sem ocorrências neste grupo.</p>
+      )}
+    </section>
+  );
+}
+
 export default function OccurrenceTrendsPanel({
   occurrences,
   mode,
@@ -235,6 +272,32 @@ export default function OccurrenceTrendsPanel({
               O último intervalo ainda está em andamento e pode conter menos ocorrências; ele não entra na comparação de início e fim.
             </p>
           )}
+          <section className="occurrence-trend-breakdown" aria-labelledby="occurrence-trend-breakdown-title">
+            <div className="occurrence-trend-breakdown-heading">
+              <div>
+                <h3 id="occurrence-trend-breakdown-title">Ocorrências contabilizadas</h3>
+                <p>Por data da ocorrência, considerando os filtros atuais.</p>
+              </div>
+              <strong>{trends.totalOccurrences.toLocaleString('pt-BR')}</strong>
+            </div>
+            <div className="occurrence-trend-breakdown-groups">
+              <OccurrenceBreakdownGroup
+                title="Por tipo"
+                entries={trends.byType}
+                total={trends.totalOccurrences}
+              />
+              <OccurrenceBreakdownGroup
+                title="Por gravidade"
+                entries={trends.bySeverity}
+                total={trends.totalOccurrences}
+              />
+            </div>
+            {mode === 'tempo_resolucao' && (
+              <p className="occurrence-trend-breakdown-note">
+                O gráfico de resolução agrupa casos pela data em que foram resolvidos; por isso, a quantidade pode ser diferente.
+              </p>
+            )}
+          </section>
         </>
       )}
       {!loading && !error && !trends && (
