@@ -195,6 +195,7 @@ Table ocorrencias {
   status varchar(25) [not null]
   descricao text
   ocorrida_em datetime [not null]
+  resolvida_em datetime [note: 'Data/hora de resolução; nula para ocorrências não resolvidas']
   indexes {
     (id_localizacao, ocorrida_em)
     (ocorrida_em, tipo)

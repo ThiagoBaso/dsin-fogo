@@ -19,6 +19,20 @@ OCCURRENCE_HISTORY_START = datetime(2024, 1, 1)
 DEMO_MAP_CENTER = (-49.950, -22.217)  # same center as generate_neighborhood_boundaries.py
 DEMO_MAP_HALF_SPAN = 0.07
 OCCURRENCE_HOTSPOT_RADIUS_M = 2_500
+OCCURRENCE_RESOLUTION_SECTOR_FACTORS = (0.62, 1.55, 0.78, 1.72, 0.92, 1.28, 0.70)
+OCCURRENCE_RESOLUTION_BASE_MINUTES = {
+    "tr\u00e2nsito": 100,
+    "falha de equipamento": 360,
+    "estacionamento": 60,
+    "seguran\u00e7a": 160,
+    "obstru\u00e7\u00e3o": 180,
+}
+OCCURRENCE_RESOLUTION_SEVERITY_FACTORS = {
+    "baixa": 0.92,
+    "media": 1.0,
+    "alta": 1.12,
+    "critica": 1.22,
+}
 
 
 def q(value):
@@ -123,9 +137,44 @@ def random_datetime(rng, start, end):
     return start + timedelta(seconds=rng.randint(0, span_seconds))
 
 
+def occurrence_resolution_duration_seconds(seed, occurrence_id, location, hotspots,
+                                           occurrence_type, severity, occurred):
+    """Create a reproducible duration with persistent differences between service sectors."""
+    sector_index = min(
+        range(len(hotspots)),
+        key=lambda index: haversine_m(location, (hotspots[index][0], hotspots[index][1])),
+    )
+    sector_factor = OCCURRENCE_RESOLUTION_SECTOR_FACTORS[
+        sector_index % len(OCCURRENCE_RESOLUTION_SECTOR_FACTORS)
+    ]
+    base_minutes = OCCURRENCE_RESOLUTION_BASE_MINUTES.get(occurrence_type, 180)
+    severity_factor = OCCURRENCE_RESOLUTION_SEVERITY_FACTORS.get(severity, 1.0)
+    outside_business_hours = occurred.weekday() >= 5 or occurred.hour < 7 or occurred.hour >= 19
+    schedule_factor = 1.12 if outside_business_hours else 1.0
+    duration_rng = random.Random((seed * 1_000_003) ^ (occurrence_id * 0x9E3779B1))
+    variation = duration_rng.lognormvariate(0, 0.42)
+    duration_seconds = round(base_minutes * severity_factor * sector_factor * schedule_factor * variation * 60)
+    return min(max(duration_seconds, 60), 14 * 24 * 60 * 60)
+
+
+def occurrence_resolution_datetime(seed, occurrence_id, location, hotspots,
+                                   occurrence_type, severity, occurred, status, now=NOW):
+    """Create a reproducible resolution timestamp for resolved demo incidents only."""
+    if status != "resolvida":
+        return None
+
+    duration_seconds = occurrence_resolution_duration_seconds(
+        seed, occurrence_id, location, hotspots, occurrence_type, severity, occurred,
+    )
+    available_seconds = int((now - occurred).total_seconds())
+    if available_seconds <= 0:
+        return None
+    return occurred + timedelta(seconds=min(duration_seconds, available_seconds))
+
+
 def occurrence_migration_sql(occurrences):
     """Append missing historical occurrence IDs to databases with a persistent volume."""
-    new_rows = [row for row in occurrences if row[0] > 1_000]
+    new_rows = [row[:9] for row in occurrences if row[0] > 1_000]
     rows_sql = insert(
         "ocorrencias",
         ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em"],
@@ -138,6 +187,79 @@ def occurrence_migration_sql(occurrences):
         + rows_sql
         + "COMMIT;\n"
     )
+
+
+def occurrence_resolution_migration_sql(occurrences, location_coords, hotspots, seed):
+    """Backfill generated resolution dates on existing demo rows without touching live data."""
+    rows = []
+    for row in occurrences:
+        duration_seconds = occurrence_resolution_duration_seconds(
+            seed, row[0], location_coords[row[1]], hotspots, row[4], row[5], row[8],
+        )
+        rows.append((row[0], row[1], row[2], row[3], row[5], duration_seconds))
+    schema_migration = """-- Add simulated resolution dates to generated demo occurrences only.
+DROP PROCEDURE IF EXISTS migrate_occurrence_resolution_schema;
+DELIMITER //
+CREATE PROCEDURE migrate_occurrence_resolution_schema()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'ocorrencias' AND column_name = 'resolvida_em'
+  ) THEN
+    ALTER TABLE ocorrencias ADD COLUMN resolvida_em DATETIME NULL AFTER ocorrida_em;
+  END IF;
+END//
+DELIMITER ;
+CALL migrate_occurrence_resolution_schema();
+DROP PROCEDURE migrate_occurrence_resolution_schema;
+START TRANSACTION;
+CREATE TEMPORARY TABLE migration_occurrence_resolution (
+  id_ocorrencia INT UNSIGNED NOT NULL PRIMARY KEY,
+  id_localizacao INT UNSIGNED NOT NULL,
+  id_orgao INT UNSIGNED NOT NULL,
+  id_equipamento INT UNSIGNED NULL,
+  gravidade ENUM('baixa','media','alta','critica') NOT NULL,
+  duracao_segundos INT UNSIGNED NOT NULL
+) ENGINE=InnoDB;
+"""
+    staging_insert = insert(
+        "migration_occurrence_resolution",
+        ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento",
+         "gravidade", "duracao_segundos"],
+        rows,
+    ).replace("INSERT INTO `migration_occurrence_resolution`", "INSERT INTO migration_occurrence_resolution")
+    update = """UPDATE ocorrencias AS occurrence
+JOIN migration_occurrence_resolution AS resolution_source
+  ON resolution_source.id_ocorrencia = occurrence.id_ocorrencia
+ AND resolution_source.id_localizacao = occurrence.id_localizacao
+ AND resolution_source.id_orgao = occurrence.id_orgao
+ AND resolution_source.id_equipamento <=> occurrence.id_equipamento
+ AND resolution_source.gravidade = occurrence.gravidade
+SET occurrence.resolvida_em = LEAST(
+  TIMESTAMPADD(SECOND, resolution_source.duracao_segundos, occurrence.ocorrida_em), NOW()
+)
+WHERE occurrence.status = 'resolvida'
+  AND occurrence.resolvida_em IS NULL
+  AND occurrence.descricao LIKE 'Evento fict%'
+  AND occurrence.ocorrida_em < NOW()
+  AND resolution_source.duracao_segundos > 0;
+
+-- Older demo volumes may have changed generated attributes; their synthetic description and ID still identify them.
+UPDATE ocorrencias AS occurrence
+JOIN migration_occurrence_resolution AS resolution_source
+  ON resolution_source.id_ocorrencia = occurrence.id_ocorrencia
+SET occurrence.resolvida_em = LEAST(
+  TIMESTAMPADD(SECOND, resolution_source.duracao_segundos, occurrence.ocorrida_em), NOW()
+)
+WHERE occurrence.status = 'resolvida'
+  AND occurrence.resolvida_em IS NULL
+  AND occurrence.descricao LIKE 'Evento fict%'
+  AND occurrence.ocorrida_em < NOW()
+  AND resolution_source.duracao_segundos > 0;
+DROP TEMPORARY TABLE migration_occurrence_resolution;
+COMMIT;
+"""
+    return schema_migration + staging_insert + update
 
 
 def migration_sql(active_trips, active_positions):
@@ -819,16 +941,31 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             occurred = OCCURRENCE_HISTORY_START if force_start else random_datetime(rng, OCCURRENCE_HISTORY_START, NOW)
         if force_now:
             occurred = NOW
+        occurrence_type = rng.choices(occurrence_types, profile["types"], k=1)[0]
+        severity = rng.choices(severities, profile["severity"], k=1)[0]
+        if status == "resolvida" and occurred >= NOW:
+            occurred = NOW - timedelta(minutes=1)
+        resolved = occurrence_resolution_datetime(
+            seed,
+            occurrence_id,
+            occurrence_coords[location_id],
+            hotspots,
+            occurrence_type,
+            severity,
+            occurred,
+            status,
+        )
         occurrences.append((
             occurrence_id,
             location_id,
             org_id,
             equip_id,
-            rng.choices(occurrence_types, profile["types"], k=1)[0],
-            rng.choices(severities, profile["severity"], k=1)[0],
+            occurrence_type,
+            severity,
             status,
             description,
             occurred,
+            resolved,
         ))
 
     for equipment_index, equip_id in enumerate(priority_equipment_ids):
@@ -858,7 +995,7 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
             0, rng.randint(1, 4), equip_id, False,
             "Evento fict\u00edcio para demonstra\u00e7\u00e3o e an\u00e1lise.",
         )
-    add("ocorrencias", ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em"], occurrences)
+    add("ocorrencias", ["id_ocorrencia", "id_localizacao", "id_orgao", "id_equipamento", "tipo", "gravidade", "status", "descricao", "ocorrida_em", "resolvida_em"], occurrences)
     alerts = []
     for i in range(1, 251):
         targets = [None, None, None, None]
@@ -882,6 +1019,12 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     occurrence_migration_temp = occurrence_migration_path.with_suffix(occurrence_migration_path.suffix + ".tmp")
     occurrence_migration_temp.write_text(occurrence_migration_sql(occurrences), encoding="utf-8")
     occurrence_migration_temp.replace(occurrence_migration_path)
+    occurrence_resolution_migration_path = out.with_name("migrate_occurrence_resolution.sql")
+    occurrence_resolution_migration_temp = occurrence_resolution_migration_path.with_suffix(
+        occurrence_resolution_migration_path.suffix + ".tmp")
+    occurrence_resolution_migration_temp.write_text(
+        occurrence_resolution_migration_sql(occurrences, occurrence_coords, hotspots, seed), encoding="utf-8")
+    occurrence_resolution_migration_temp.replace(occurrence_resolution_migration_path)
     active_trip_rows = [row for row in trip_rows if row[5] == "em_andamento"]
     active_trip_ids = {row[0] for row in active_trip_rows}
     active_position_rows = [
@@ -925,6 +1068,8 @@ def generate(seed: int, out: Path, graph_path: Path, without_routes: bool = Fals
     agent_coverage_temp.replace(agent_coverage_path)
     summary = {
         **counts,
+        "ocorrencias_resolvidas_com_data": sum(row[6] == "resolvida" and row[9] is not None for row in occurrences),
+        "ocorrencias_sem_data_de_resolucao": sum(row[9] is None for row in occurrences),
         "equipamentos_moveis": sum(equipment_type[i] in mobile_ids for i in equipment_type),
         "viagens_em_andamento": active_trip_count,
         "turnos_em_atividade": sum(row[8] == "em_atividade" for row in shifts),

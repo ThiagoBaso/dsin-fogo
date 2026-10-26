@@ -117,14 +117,14 @@ export function buildCoverageGrid(sources: CoverageSource[]) {
   return { bounds, width, height, resolution, values };
 }
 
-/** Stable colors for equivalent overlapping contributions, independent of the dataset's maximum. */
-export function coverageIntensity(value: number) {
-  return Math.min(1, Math.log1p(Math.max(0, value)) / Math.log1p(10));
+/** Logarithmic color intensity with a configurable upper scale. */
+export function coverageIntensity(value: number, maximum = 10) {
+  return Math.min(1, Math.log1p(Math.max(0, value)) / Math.log1p(Math.max(0.01, maximum)));
 }
 
-export function coveragePixel(value: number): [number, number, number, number] {
+export function coveragePixel(value: number, maximum = 10): [number, number, number, number] {
   if (value <= 0) return [0, 0, 0, 0];
-  const intensity = coverageIntensity(value);
+  const intensity = coverageIntensity(value, maximum);
   const upperIndex = Math.max(1, heatColors.findIndex((stop) => stop.at >= intensity));
   const lower = heatColors[upperIndex - 1];
   const upper = heatColors[upperIndex];

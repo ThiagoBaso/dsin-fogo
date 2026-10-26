@@ -133,6 +133,7 @@ export interface OcorrenciaEquipamento {
   status: 'aberta' | 'em_atendimento' | 'resolvida' | 'cancelada';
   descricao: string | null;
   ocorrida_em: string;
+  resolvida_em: string | null;
   logradouro: string | null;
   bairro: string | null;
   cidade: string | null;

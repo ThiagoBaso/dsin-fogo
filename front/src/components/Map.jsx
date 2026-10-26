@@ -44,9 +44,9 @@ export default function MapaMarilia({
   coverageHeatEnabled = false,
   coverageSources = [],
   occurrenceHeatEnabled = false,
-  occurrenceHeatSources = [],
+  occurrenceHeatGrid,
   occurrenceHeatMode = 'quantidade',
-  occurrenceHeatPeriodDays = 1,
+  occurrenceHeatResolutionSummary,
 }) {
   return (
     <MapContainer
@@ -68,9 +68,9 @@ export default function MapaMarilia({
       />
       <OccurrenceHeatLayer
         enabled={occurrenceHeatEnabled}
-        sources={occurrenceHeatSources}
+        grid={occurrenceHeatGrid}
         mode={occurrenceHeatMode}
-        periodDays={occurrenceHeatPeriodDays}
+        resolutionSummary={occurrenceHeatResolutionSummary}
       />
       <EquipmentMarkers
         pontos={pontos}

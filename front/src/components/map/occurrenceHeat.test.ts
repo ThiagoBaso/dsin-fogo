@@ -1,13 +1,16 @@
 import {
   buildOccurrenceHeatGrid, collectOccurrenceHeatSources, countOccurrencePeriodDays, occurrenceHeatPixel,
+  summarizeOccurrenceResolution,
 } from './occurrenceHeat';
 
 const occurrence = {
   latitude: -22.217,
   longitude: -49.95,
   gravidade: 'baixa' as const,
+  status: 'aberta' as const,
   tipo: 'trânsito',
   ocorrida_em: '2024-01-01T08:00:00',
+  resolvida_em: null,
 };
 
 function peak(values: Float32Array) {
@@ -49,6 +52,7 @@ test('adds overlapping events to the same fixed-radius heat grid', () => {
   expect(two.countValues.length).toBe(one.countValues.length);
   expect(peak(two.countValues)).toBeCloseTo(2 * peak(one.countValues));
   expect(peak(two.severityValues)).toBeCloseTo(2 * peak(one.severityValues));
+  expect(two.quantityScaleMaximum).toBeGreaterThan(one.quantityScaleMaximum);
 });
 
 test('uses gravity colors and intensity, while combined mode separates hue from count', () => {
@@ -64,6 +68,10 @@ test('uses gravity colors and intensity, while combined mode separates hue from 
   expect(fourLowCombined[3]).toBe(fourCriticalCombined[3]);
 
   expect(occurrenceHeatPixel(4, 4, 'quantidade')).toEqual(occurrenceHeatPixel(4, 16, 'quantidade'));
+  const fixedQuantityScale = occurrenceHeatPixel(10, 10, 'quantidade');
+  const adaptiveQuantityScale = occurrenceHeatPixel(10, 10, 'quantidade', 0, 0, 1, 100);
+  expect(fixedQuantityScale.slice(0, 3)).toEqual([220, 38, 38]);
+  expect(adaptiveQuantityScale[0]).toBeLessThan(fixedQuantityScale[0]);
   expect(occurrenceHeatPixel(0, 0, 'quantidade')[3]).toBe(0);
 });
 
@@ -118,4 +126,31 @@ test('does not call same-day events, different types, or distant events recurren
   expect(peak(buildOccurrenceHeatGrid(differentTypes.sources, true)!.recurrenceValues!)).toBe(0);
   expect(peak(buildOccurrenceHeatGrid(distant.sources, true)!.recurrenceValues!)).toBe(0);
   expect(occurrenceHeatPixel(1, 1, 'recorrencia', 0)).toEqual([0, 0, 0, 0]);
+});
+
+test('builds resolution heat from resolved events using a local median', () => {
+  const events = [
+    { ...occurrence, status: 'resolvida' as const, resolvida_em: '2024-01-01T09:00:00' },
+    { ...occurrence, status: 'resolvida' as const, resolvida_em: '2024-01-01T13:00:00' },
+    { ...occurrence, status: 'resolvida' as const, resolvida_em: '2024-01-01T12:00:00' },
+    { ...occurrence, status: 'em_atendimento' as const, resolvida_em: null },
+  ];
+  const sources = collectOccurrenceHeatSources(events).sources;
+  const summary = summarizeOccurrenceResolution(sources);
+  const grid = buildOccurrenceHeatGrid(sources, false, 1, true)!;
+
+  expect(sources.map((source) => source.resolutionHours)).toEqual([1, 5, 4, null]);
+  expect(summary).toEqual({ resolvedCount: 3, areaCount: 1, maximumHours: 4 });
+  expect(peak(grid.resolutionValues!)).toBeCloseTo(4);
+  expect(buildOccurrenceHeatGrid(sources.slice(0, 2), false, 1, true)).toBeNull();
+});
+
+test('uses blue for faster resolution and red for slower resolution', () => {
+  const fast = occurrenceHeatPixel(0, 0, 'tempo_resolucao', 0, 0.25, 10);
+  const slow = occurrenceHeatPixel(0, 0, 'tempo_resolucao', 0, 10, 10);
+
+  expect(fast.slice(0, 3)).toEqual([28, 74, 178]);
+  expect(slow.slice(0, 3)).toEqual([220, 38, 38]);
+  expect(slow[3]).toBeGreaterThan(fast[3]);
+  expect(occurrenceHeatPixel(0, 0, 'tempo_resolucao', 0, 0, 10)[3]).toBe(0);
 });

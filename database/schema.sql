@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS ocorrencias (
   status ENUM('aberta','em_atendimento','resolvida','cancelada') NOT NULL,
   descricao TEXT,
   ocorrida_em DATETIME NOT NULL,
+  resolvida_em DATETIME,
   KEY ix_ocorr_local_tempo (id_localizacao, ocorrida_em),
   KEY ix_ocorr_tempo_tipo (ocorrida_em, tipo),
   CONSTRAINT fk_ocorr_local FOREIGN KEY (id_localizacao) REFERENCES localizacoes(id_localizacao),

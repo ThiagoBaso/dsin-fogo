@@ -83,12 +83,14 @@ test('renders occurrence heat separately and keeps filtered points when occurren
   const occurrences: OcorrenciaMapa[] = [
     {
       id: 11, tipo: 'Acidente', gravidade: 'critica', status: 'aberta', descricao: null,
-      ocorrida_em: '2026-10-25T10:00:00', logradouro: null, bairro: 'Centro', cidade: 'Marília', uf: 'SP',
+      ocorrida_em: '2026-10-25T10:00:00', resolvida_em: null,
+      logradouro: null, bairro: 'Centro', cidade: 'Marília', uf: 'SP',
       latitude: -22.217, longitude: -49.95, orgao_nome: 'SMU', equipamento_nome: null,
     },
     {
       id: 12, tipo: 'Incêndio', gravidade: 'media', status: 'em_atendimento', descricao: null,
-      ocorrida_em: '2026-10-25T10:10:00', logradouro: null, bairro: 'Centro', cidade: 'Marília', uf: 'SP',
+      ocorrida_em: '2026-10-25T10:10:00', resolvida_em: null,
+      logradouro: null, bairro: 'Centro', cidade: 'Marília', uf: 'SP',
       latitude: -22.218, longitude: -49.951, orgao_nome: 'SMU', equipamento_nome: null,
     },
   ];
@@ -101,36 +103,46 @@ test('renders occurrence heat separately and keeps filtered points when occurren
 
   const occurrenceFilters = container.querySelector('.equipment-occurrence-filters') as HTMLElement;
   fireEvent.click(within(occurrenceFilters).getByText('Ocorrências'));
-  await waitFor(() => expect(mapProps().occurrenceHeatSources).toHaveLength(2));
-  expect(mapProps().occurrenceHeatPeriodDays).toBe(1);
+  expect(mapProps().occurrenceHeatGrid).toBeNull();
   expect(mapProps().occurrences).toEqual([]);
   expect(mapProps().occurrenceHeatEnabled).toBe(false);
 
   fireEvent.click(screen.getByLabelText('Aplicar mapa de calor de ocorrências'));
+  await waitFor(() => expect(mapProps().occurrenceHeatGrid?.countValues).toBeDefined());
   expect(mapProps().coverageHeatEnabled).toBe(false);
   expect(mapProps().occurrenceHeatEnabled).toBe(true);
   expect(mapProps().occurrenceHeatMode).toBe('quantidade');
-  expect(mapProps().occurrenceHeatSources.map((source: { severityWeight: number }) => source.severityWeight)).toEqual([4, 2]);
+  expect(mapProps().occurrenceHeatGrid.quantityScaleMaximum).toBeGreaterThan(0);
+  expect(Math.max(...mapProps().occurrenceHeatGrid.severityValues)).toBeGreaterThan(
+    Math.max(...mapProps().occurrenceHeatGrid.countValues),
+  );
 
   fireEvent.click(within(occurrenceFilters).getByLabelText('Exibir ocorrências no mapa'));
   await waitFor(() => expect(mapProps().occurrences).toEqual(occurrences));
+  const visibleHeatGrid = mapProps().occurrenceHeatGrid;
+  const visibility = within(container.querySelector('.map-selection-summary') as HTMLElement);
+  fireEvent.click(visibility.getByLabelText('Exibir marcadores de ocorrências no mapa'));
+  expect(mapProps().showOccurrences).toBe(false);
+  expect(mapProps().occurrenceHeatEnabled).toBe(true);
+  expect(mapProps().occurrenceHeatGrid).toBe(visibleHeatGrid);
 
   fireEvent.change(screen.getByLabelText('Visualizar mapa de calor de ocorrências por'), {
     target: { value: 'gravidade' },
   });
   expect(mapProps().occurrenceHeatMode).toBe('gravidade');
-  expect(mapProps().occurrenceHeatSources.map((source: { severityWeight: number }) => source.severityWeight)).toEqual([4, 2]);
+  expect(mapProps().occurrenceHeatGrid.quantityScaleMaximum).toBeGreaterThan(0);
 
   fireEvent.change(screen.getByLabelText('Visualizar mapa de calor de ocorrências por'), {
     target: { value: 'recorrencia' },
   });
   expect(mapProps().occurrenceHeatMode).toBe('recorrencia');
 
-  const visibility = within(container.querySelector('.map-selection-summary') as HTMLElement);
-  fireEvent.click(visibility.getByLabelText('Exibir marcadores de ocorrências no mapa'));
-  expect(mapProps().showOccurrences).toBe(false);
-  expect(mapProps().occurrenceHeatEnabled).toBe(true);
-  expect(mapProps().occurrenceHeatSources).toHaveLength(2);
+  fireEvent.change(screen.getByLabelText('Visualizar mapa de calor de ocorrências por'), {
+    target: { value: 'tempo_resolucao' },
+  });
+  expect(mapProps().occurrenceHeatMode).toBe('tempo_resolucao');
+  expect(mapProps().occurrenceHeatResolutionSummary).toMatchObject({ resolvedCount: 0, areaCount: 0 });
+  expect(screen.getByText(/O filtro Atuais só traz ocorrências abertas ou em atendimento/)).toBeInTheDocument();
 });
 
 test('clicking a selected vehicle marker deselects it and removes its route', async () => {

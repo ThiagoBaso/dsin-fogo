@@ -8,6 +8,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from statistics import median
 
 import mysql.connector
 
@@ -111,9 +112,45 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
             rows = _parse_value_list(match.group(3))
             migration_occurrences.extend(dict(zip(columns, row)) for row in rows)
     expected_migration_occurrences = [row for row in occurrences if row["id_ocorrencia"] > 1000]
+    expected_migration_occurrences = [
+        {column: row[column] for column in migration_occurrences[0]} if migration_occurrences else row
+        for row in expected_migration_occurrences
+    ]
     check("migracao inclui ocorrencias historicas ausentes",
           migration_occurrences == expected_migration_occurrences and len(migration_occurrences) == 9000,
           f"{len(migration_occurrences)} registros na migracao; {len(expected_migration_occurrences)} esperados")
+    resolution_migration_path = seed_path.with_name("migrate_occurrence_resolution.sql")
+    migration_resolution_rows = []
+    if resolution_migration_path.exists():
+        resolution_sql = resolution_migration_path.read_text(encoding="utf-8")
+        resolution_match = re.search(
+            r"INSERT INTO migration_occurrence_resolution\s*\(([^)]*)\) VALUES\s*(.*?);",
+            resolution_sql,
+            re.S,
+        )
+        if resolution_match:
+            columns = re.findall(r"`([^`]+)`", resolution_match.group(1))
+            migration_resolution_rows = [
+                dict(zip(columns, row)) for row in _parse_value_list(resolution_match.group(2))
+            ]
+    seed_occurrences_by_id = {row["id_ocorrencia"]: row for row in occurrences}
+    resolution_migration_matches = (
+        len(migration_resolution_rows) == len(occurrences)
+        and {row["id_ocorrencia"] for row in migration_resolution_rows} == set(seed_occurrences_by_id)
+        and all(
+            row["id_ocorrencia"] in seed_occurrences_by_id
+            and all(
+                row[column] == seed_occurrences_by_id[row["id_ocorrencia"]][column]
+                for column in ("id_localizacao", "id_orgao", "id_equipamento", "gravidade")
+            )
+            and 0 < row["duracao_segundos"] <= 14 * 24 * 60 * 60
+            for row in migration_resolution_rows
+        )
+    )
+    check("migracao de resolucao corresponde ao seed",
+          resolution_migration_path.exists()
+          and resolution_migration_matches,
+          f"{len(migration_resolution_rows)} registros na migracao; {len(occurrences)} no seed")
     eq = {r["id_equipamento"]: r for r in tables["equipamentos"]}
     types = {r["id_tipo"]: r for r in tables["tipos_equipamento"]}
     situation_counts = defaultdict(int)
@@ -264,12 +301,35 @@ def validate_seed(seed_path: Path, graph_path: Path) -> int:
     occurrence_locations = {row["id_localizacao"]: row for row in tables["localizacoes"]}
     incidents_per_location = defaultdict(int)
     severity_by_grid = defaultdict(list)
+    resolution_hours_by_grid = defaultdict(list)
+    resolution_timestamps_valid = True
     severity_score = {"baixa": 1, "media": 2, "alta": 3, "critica": 4}
     for occurrence in occurrences:
         incidents_per_location[occurrence["id_localizacao"]] += 1
         place = occurrence_locations[occurrence["id_localizacao"]]
         cell = (round(place["latitude"], 2), round(place["longitude"], 2))
         severity_by_grid[cell].append(severity_score[occurrence["gravidade"]])
+        resolution = occurrence.get("resolvida_em")
+        if occurrence["status"] == "resolvida":
+            if resolution is None:
+                resolution_timestamps_valid = False
+                continue
+            occurred_at = datetime.fromisoformat(occurrence["ocorrida_em"])
+            resolved_at = datetime.fromisoformat(resolution)
+            if resolved_at <= occurred_at or resolved_at > datetime.now():
+                resolution_timestamps_valid = False
+                continue
+            resolution_hours_by_grid[cell].append((resolved_at - occurred_at).total_seconds() / 3600)
+        elif resolution is not None:
+            resolution_timestamps_valid = False
+    check("datas de resolucao coerentes com o status",
+          resolution_timestamps_valid,
+          f"{sum(len(values) for values in resolution_hours_by_grid.values())} ocorrencias resolvidas com data; demais sem data")
+    regional_medians = [median(hours) for hours in resolution_hours_by_grid.values() if len(hours) >= 40]
+    resolution_spread = max(regional_medians, default=0) / min(regional_medians, default=1)
+    check("tempos de resolucao variam entre areas",
+          len(regional_medians) >= 3 and resolution_spread >= 1.5,
+          f"{len(regional_medians)} areas com 40+ casos; mediana max/min {resolution_spread:.2f}x")
     top_location_count = max(1, len(incidents_per_location) // 10)
     top_location_share = sum(sorted(incidents_per_location.values(), reverse=True)[:top_location_count]) / max(1, len(occurrences))
     check("concentracao geografica de ocorrencias",
@@ -471,6 +531,31 @@ def main() -> int:
     check("posições GPS", "SELECT COUNT(*) FROM posicoes_equipamento WHERE id_viagem IS NOT NULL", lambda n: n >= 28800, ">= 28800")
     check("manutenções", "SELECT COUNT(*) FROM manutencoes", lambda n: n >= 800, ">= 800")
     check("ocorrências", "SELECT COUNT(*) FROM ocorrencias", lambda n: n >= 10000, ">= 10000")
+    check("datas de resolução coerentes", "SELECT COUNT(*) FROM ocorrencias WHERE resolvida_em IS NOT NULL AND (status <> 'resolvida' OR resolvida_em <= ocorrida_em OR resolvida_em > NOW())", lambda n: n == 0, "0 inconsistentes")
+    check("resoluções demonstrativas preenchidas", "SELECT COUNT(*) FROM ocorrencias WHERE id_ocorrencia <= 10000 AND descricao LIKE 'Evento fict%' AND status='resolvida' AND resolvida_em IS NULL", lambda n: n == 0, "0 sem data")
+    cursor.execute("""
+        WITH durations AS (
+          SELECT ROUND(l.latitude,2) AS lat, ROUND(l.longitude,2) AS lon,
+                 TIMESTAMPDIFF(SECOND,o.ocorrida_em,o.resolvida_em)/3600 AS hours
+          FROM ocorrencias o JOIN localizacoes l ON l.id_localizacao=o.id_localizacao
+          WHERE o.status='resolvida' AND o.resolvida_em IS NOT NULL
+        ), ranked AS (
+          SELECT lat,lon,hours,ROW_NUMBER() OVER (PARTITION BY lat,lon ORDER BY hours) AS rn,
+                 COUNT(*) OVER (PARTITION BY lat,lon) AS n
+          FROM durations
+        ), medians AS (
+          SELECT lat,lon,AVG(hours) AS median_hours FROM ranked
+          WHERE rn IN (FLOOR((n+1)/2),FLOOR((n+2)/2))
+          GROUP BY lat,lon HAVING MAX(n)>=40
+        )
+        SELECT COUNT(*), MAX(median_hours)/MIN(median_hours) FROM medians
+    """)
+    area_count, response_time_spread = cursor.fetchone()
+    response_time_spread = response_time_spread or 0
+    checks.append(("tempos de resolução variam entre áreas",
+                   area_count >= 3 and response_time_spread >= 1.5,
+                   f"{area_count} áreas; relação lenta/rápida {response_time_spread:.2f}x",
+                   ">= 3 áreas e >= 1.5x"))
     check("alertas", "SELECT COUNT(*) FROM alertas", lambda n: n >= 250, ">= 250")
     check("viagens com ao menos 120 posições", "SELECT COUNT(*) FROM (SELECT id_viagem FROM posicoes_equipamento WHERE id_viagem IS NOT NULL GROUP BY id_viagem HAVING COUNT(*) >= 120) q", lambda n: n >= 240, ">= 240 viagens")
     import osmnx as ox

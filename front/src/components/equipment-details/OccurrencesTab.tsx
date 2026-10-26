@@ -31,6 +31,9 @@ export default function OccurrencesTab({
               <dl>
                 <Field label="Status" value={occurrenceStatusLabels[ocorrencia.status]} />
                 <Field label="Data e hora" value={formatDate(ocorrencia.ocorrida_em)} />
+                {ocorrencia.resolvida_em && (
+                  <Field label="Resolvida em" value={formatDate(ocorrencia.resolvida_em)} />
+                )}
                 {ocorrencia.descricao && <Field label="Descrição" value={ocorrencia.descricao} />}
                 <Field label="Local" value={[ocorrencia.logradouro, ocorrencia.bairro, ocorrencia.cidade, ocorrencia.uf].filter(Boolean).join(', ')} />
               </dl>

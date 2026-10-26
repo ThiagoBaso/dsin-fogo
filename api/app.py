@@ -120,7 +120,7 @@ def list_ocorrencias_mapa(
     return fetch_all(
         """
         SELECT o.id_ocorrencia AS id, o.tipo, o.gravidade, o.status,
-               o.descricao, o.ocorrida_em,
+               o.descricao, o.ocorrida_em, o.resolvida_em,
                CAST(l.latitude AS DOUBLE) AS latitude,
                CAST(l.longitude AS DOUBLE) AS longitude,
                l.logradouro, b.nome AS bairro, l.cidade, l.uf,
@@ -411,7 +411,7 @@ def list_ocorrencias_equipamento(equipamento_id: int, em: datetime | None = None
     return fetch_all(
         """
         SELECT o.id_ocorrencia AS id, o.tipo, o.gravidade, o.status,
-               o.descricao, o.ocorrida_em,
+               o.descricao, o.ocorrida_em, o.resolvida_em,
                l.logradouro, b.nome AS bairro, l.cidade, l.uf
         FROM ocorrencias o
         LEFT JOIN localizacoes l ON l.id_localizacao = o.id_localizacao

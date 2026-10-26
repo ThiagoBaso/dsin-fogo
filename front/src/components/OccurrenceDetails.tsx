@@ -50,6 +50,9 @@ export default function OccurrenceDetails({
               <Field label="Gravidade" value={severityLabels[occurrence.gravidade]} />
               <Field label="Status" value={statusLabels[occurrence.status]} />
               <Field label="Data e hora" value={formatDate(occurrence.ocorrida_em)} />
+              {occurrence.resolvida_em && (
+                <Field label="Resolvida em" value={formatDate(occurrence.resolvida_em)} />
+              )}
             </dl>
           </div>
           <div className="equipment-detail-group">

@@ -9,8 +9,9 @@ import EquipmentDetails from './components/EquipmentDetails';
 import OccurrenceDetails from './components/OccurrenceDetails';
 import FilterPanel from './components/FilterPanel';
 import {
-  collectOccurrenceHeatSources, countOccurrencePeriodDays, occurrenceRecurrenceGradient,
-  occurrenceSeverityGradient, OccurrenceHeatMode,
+  buildOccurrenceHeatGrid, collectOccurrenceHeatSources, countOccurrencePeriodDays, occurrenceRecurrenceGradient,
+  occurrenceResolutionGradient, occurrenceSeverityGradient, OccurrenceHeatMode,
+  summarizeOccurrenceResolution,
 } from './components/map/occurrenceHeat';
 import {
   Aba,
@@ -49,6 +50,16 @@ const emptyLocationFilters: LocationFilters = {
 
 function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function formatResolutionHours(hours: number) {
+  if (hours >= 24) return `${(hours / 24).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} d`;
+  if (hours >= 1) return `${hours.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h`;
+  return `${Math.round(hours * 60)} min`;
+}
+
+function formatQuantityScale(value: number) {
+  return value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 }
 
 function startOfTodayValue() {
@@ -340,6 +351,21 @@ function App() {
   const calorOcorrencias = useMemo(
     () => collectOccurrenceHeatSources(ocorrenciasFiltradas),
     [ocorrenciasFiltradas],
+  );
+  const resumoCalorResolucao = useMemo(
+    () => summarizeOccurrenceResolution(calorOcorrencias.sources),
+    [calorOcorrencias.sources],
+  );
+  const gradeCalorOcorrencias = useMemo(
+    () => mapaCalorOcorrencias
+      ? buildOccurrenceHeatGrid(
+        calorOcorrencias.sources,
+        modoCalorOcorrencias === 'recorrencia',
+        diasPeriodoRecorrencia,
+        modoCalorOcorrencias === 'tempo_resolucao',
+      )
+      : null,
+    [mapaCalorOcorrencias, calorOcorrencias.sources, modoCalorOcorrencias, diasPeriodoRecorrencia],
   );
   const agenteDetalhes = agentes.find((agente) => agente.id === detalhesAgenteId) || null;
 
@@ -690,9 +716,9 @@ function App() {
             coverageHeatEnabled={mapaCalorCobertura}
             coverageSources={cobertura.sources}
             occurrenceHeatEnabled={mapaCalorOcorrencias}
-            occurrenceHeatSources={calorOcorrencias.sources}
+            occurrenceHeatGrid={gradeCalorOcorrencias}
             occurrenceHeatMode={modoCalorOcorrencias}
-            occurrenceHeatPeriodDays={diasPeriodoRecorrencia}
+            occurrenceHeatResolutionSummary={resumoCalorResolucao}
           />
           <div className="map-heat-control" role="group" aria-label="Filtros de mapa de calor">
             <strong>Mapa de calor</strong>
@@ -743,40 +769,66 @@ function App() {
                     <option value="gravidade">Gravidade</option>
                     <option value="ambos">Quantidade + gravidade</option>
                     <option value="recorrencia">Recorrência</option>
+                    <option value="tempo_resolucao">Tempo de resolução</option>
                   </select>
                 </label>
                 <p className="map-heat-description" aria-live="polite">
-                  {calorOcorrencias.sources.length} ocorrências filtradas, inclusive ocultas ou fora da tela.
+                  {modoCalorOcorrencias === 'tempo_resolucao'
+                    ? `${resumoCalorResolucao.resolvedCount} ocorrências resolvidas com duração válida.`
+                    : `${calorOcorrencias.sources.length} ocorrências filtradas, inclusive ocultas ou fora da tela.`}
                 </p>
                 <p className="map-heat-description">
                   {modoCalorOcorrencias === 'quantidade' && 'As cores mais quentes indicam mais ocorrências.'}
                   {modoCalorOcorrencias === 'gravidade' && 'Cor indica gravidade média; opacidade acumula gravidade.'}
                   {modoCalorOcorrencias === 'ambos' && 'Cor indica gravidade; opacidade indica quantidade.'}
                   {modoCalorOcorrencias === 'recorrencia' && `Percentual de dias do período (${diasPeriodoRecorrencia} dias) em que o mesmo tipo ocorreu em 350 m.`}
+                  {modoCalorOcorrencias === 'tempo_resolucao' && resumoCalorResolucao.areaCount > 0
+                    && `Azul indica resolução mais rápida e vermelho, mais lenta. Mediana em 350 m; escala até ${formatResolutionHours(resumoCalorResolucao.maximumHours)} (percentil 90), incluindo pontos ocultos e fora da tela.`}
+                  {modoCalorOcorrencias === 'quantidade' && gradeCalorOcorrencias
+                    && `Escala ajustada ao percentil 95 das contribuições locais; vermelho indica ${formatQuantityScale(gradeCalorOcorrencias.quantityScaleMaximum)} ou mais no total do período.`}
+                  {modoCalorOcorrencias === 'ambos' && gradeCalorOcorrencias
+                    && `A opacidade usa escala dinâmica: máxima a partir do P95 (${formatQuantityScale(gradeCalorOcorrencias.quantityScaleMaximum)} contribuições locais).`}
                 </p>
+                {modoCalorOcorrencias === 'tempo_resolucao' && resumoCalorResolucao.areaCount === 0 && (
+                  <p className="map-heat-description" role="status">
+                    {resumoCalorResolucao.resolvedCount === 0 && periodoOcorrenciasAplicado.mode === 'atual'
+                      ? 'O filtro Atuais só traz ocorrências abertas ou em atendimento. Escolha um período para analisar as resolvidas.'
+                      : resumoCalorResolucao.resolvedCount === 0
+                        ? 'Não há ocorrências resolvidas com duração válida nos filtros atuais.'
+                        : 'Nenhuma área tem pelo menos 3 ocorrências resolvidas em um raio de 350 m.'}
+                  </p>
+                )}
                 {calorOcorrencias.excludedCount > 0 && (
                   <p className="map-heat-description">{calorOcorrencias.excludedCount} sem coordenada válida.</p>
                 )}
-                <div className="map-heat-legend" aria-label="Escala de cores do mapa de calor de ocorrências">
-                  <span>
-                    {modoCalorOcorrencias === 'quantidade' ? 'Quantidade de ocorrências'
-                      : modoCalorOcorrencias === 'recorrencia' ? '% de dias com o mesmo tipo'
-                        : 'Gravidade média'}
-                  </span>
-                  <span
-                    className="map-heat-legend-scale"
-                    style={{ background: modoCalorOcorrencias === 'quantidade' ? coverageGradient
-                      : modoCalorOcorrencias === 'recorrencia' ? occurrenceRecurrenceGradient : occurrenceSeverityGradient }}
-                    aria-hidden="true"
-                  />
-                  <div>
-                    {modoCalorOcorrencias === 'quantidade'
-                      ? <><span>Menor</span><span>Maior</span></>
-                      : modoCalorOcorrencias === 'recorrencia'
-                        ? <><span>0%</span><span>15%+</span></>
-                        : <><span>Baixa</span><span>Crítica</span></>}
+                {(modoCalorOcorrencias !== 'tempo_resolucao' || resumoCalorResolucao.areaCount > 0) && (
+                  <div className="map-heat-legend" aria-label="Escala de cores do mapa de calor de ocorrências">
+                    <span>
+                      {modoCalorOcorrencias === 'quantidade' ? 'Quantidade de ocorrências'
+                        : modoCalorOcorrencias === 'recorrencia' ? '% de dias com o mesmo tipo'
+                          : modoCalorOcorrencias === 'tempo_resolucao' ? 'Mediana do tempo de resolução'
+                            : 'Gravidade média'}
+                    </span>
+                    <span
+                      className="map-heat-legend-scale"
+                      style={{ background: modoCalorOcorrencias === 'quantidade' ? coverageGradient
+                        : modoCalorOcorrencias === 'recorrencia' ? occurrenceRecurrenceGradient
+                          : modoCalorOcorrencias === 'tempo_resolucao' ? occurrenceResolutionGradient : occurrenceSeverityGradient }}
+                      aria-hidden="true"
+                    />
+                    <div>
+                      {modoCalorOcorrencias === 'quantidade'
+                        ? gradeCalorOcorrencias
+                          ? <><span>0</span><span>P95+ ({formatQuantityScale(gradeCalorOcorrencias.quantityScaleMaximum)})</span></>
+                          : <><span>0</span><span>Sem dados</span></>
+                        : modoCalorOcorrencias === 'recorrencia'
+                          ? <><span>0%</span><span>15%+</span></>
+                          : modoCalorOcorrencias === 'tempo_resolucao'
+                            ? <><span>0 min</span><span>{formatResolutionHours(resumoCalorResolucao.maximumHours)}+</span></>
+                            : <><span>Baixa</span><span>Crítica</span></>}
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </div>
