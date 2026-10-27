@@ -153,8 +153,34 @@ function BacktestChart({ points }: { points: BacktestPoint[] }) {
   );
 }
 
-function BacktestSummary({ forecast, areaId }: { forecast: PrevisaoOcorrencias; areaId: number }) {
+function BacktestSummary({
+  forecast,
+  areaId,
+  loading,
+  error,
+}: {
+  forecast: PrevisaoOcorrencias;
+  areaId: number;
+  loading: boolean;
+  error: string;
+}) {
   const evaluation = forecast.avaliacao;
+  if (loading) {
+    return (
+      <section className="forecast-backtest" aria-label="ValidaÃ§Ã£o retrospectiva da previsÃ£o">
+        <h3>ValidaÃ§Ã£o retrospectiva</h3>
+        <p role="status">Calculando a comparaÃ§Ã£o histÃ³rica. A previsÃ£o jÃ¡ estÃ¡ disponÃ­vel no mapa.</p>
+      </section>
+    );
+  }
+  if (error) {
+    return (
+      <section className="forecast-backtest" aria-label="ValidaÃ§Ã£o retrospectiva da previsÃ£o">
+        <h3>ValidaÃ§Ã£o retrospectiva</h3>
+        <p role="alert">{error}</p>
+      </section>
+    );
+  }
   if (!evaluation) return null;
   const selectedSeries = evaluation.series_por_area.find((item) => item.area_id === areaId);
 
@@ -195,12 +221,16 @@ export default function OccurrencePredictionPanel({
   onSelectArea,
   loading,
   error,
+  loadingEvaluation,
+  evaluationError,
 }: {
   forecast: PrevisaoOcorrencias | null;
   selectedAreaId: number | null;
   onSelectArea: (areaId: number) => void;
   loading: boolean;
   error: string;
+  loadingEvaluation: boolean;
+  evaluationError: string;
 }) {
   if (loading) {
     return <section className="occurrence-prediction" aria-label="Previsão de ocorrências"><p role="status">Calculando previsão…</p></section>;
@@ -263,7 +293,12 @@ export default function OccurrencePredictionPanel({
           ))}
         </ul>
       </details>
-      <BacktestSummary forecast={forecast} areaId={area.id} />
+      <BacktestSummary
+        forecast={forecast}
+        areaId={area.id}
+        loading={loadingEvaluation}
+        error={evaluationError}
+      />
     </section>
   );
 }

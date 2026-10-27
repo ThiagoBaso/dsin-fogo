@@ -2,14 +2,23 @@
 from __future__ import annotations
 
 import os
+from collections import OrderedDict
 from contextlib import closing
 from datetime import datetime, timedelta
+from hashlib import sha256
+from threading import Lock
 
 import mysql.connector
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from forecasting import HISTORY_WEEKS, backtest_period, build_occurrence_forecast, local_now
+from forecasting import (
+    HISTORY_WEEKS,
+    backtest_period,
+    build_occurrence_evaluation,
+    build_occurrence_forecast,
+    local_now,
+)
 from geography import (
     assign_occurrences_to_prediction_areas,
     census_sector_geojson,
@@ -19,6 +28,9 @@ from geography import (
 )
 
 app = FastAPI(title="F.O.G.O. API", version="1.0.0")
+FORECAST_EVALUATION_CACHE_LIMIT = 2
+forecast_evaluation_cache: OrderedDict[str, dict | None] = OrderedDict()
+forecast_evaluation_cache_lock = Lock()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8081,http://localhost:3000").split(","),
@@ -59,6 +71,48 @@ def fetch_all(query: str, params: tuple = ()):
             return rows
     except mysql.connector.Error as exc:
         raise HTTPException(status_code=503, detail="Banco de dados indisponível") from exc
+
+
+def fetch_forecast_occurrences(generated_at: datetime) -> tuple[list[dict], int]:
+    backtest_start, _backtest_end = backtest_period(generated_at)
+    history_start = backtest_start - timedelta(weeks=HISTORY_WEEKS + 2)
+    occurrences = fetch_all(
+        """
+        SELECT o.ocorrida_em, o.gravidade,
+               CAST(l.latitude AS DOUBLE) AS latitude,
+               CAST(l.longitude AS DOUBLE) AS longitude
+        FROM ocorrencias o
+        JOIN localizacoes l ON l.id_localizacao = o.id_localizacao
+        WHERE o.status <> 'cancelada'
+          AND o.ocorrida_em >= %s
+          AND o.ocorrida_em < %s
+        ORDER BY o.ocorrida_em
+        """,
+        (history_start, generated_at),
+    )
+    return assign_occurrences_to_prediction_areas(occurrences)
+
+
+def forecast_evaluation_cache_key(occurrences: list[dict], generated_at: datetime) -> str:
+    period_start, period_end = backtest_period(generated_at)
+    digest = sha256()
+    digest.update(period_start.isoformat().encode("utf-8"))
+    digest.update(b"|")
+    digest.update(period_end.isoformat().encode("utf-8"))
+    facts = sorted(
+        (
+            int(occurrence["area_id"]),
+            occurrence["ocorrida_em"].isoformat()
+            if isinstance(occurrence["ocorrida_em"], datetime)
+            else str(occurrence["ocorrida_em"]),
+            occurrence.get("gravidade") in {"alta", "critica"},
+        )
+        for occurrence in occurrences
+        if occurrence.get("area_id") is not None and occurrence.get("ocorrida_em") is not None
+    )
+    for area_id, occurred_at, is_serious in facts:
+        digest.update(f"\n{area_id}|{occurred_at}|{int(is_serious)}".encode("utf-8"))
+    return digest.hexdigest()
 
 
 def attach_equipment_attributes(equipment_rows: list[dict]):
@@ -150,31 +204,38 @@ def list_ocorrencias_analise(
 @app.get("/api/previsoes/ocorrencias")
 def forecast_ocorrencias():
     generated_at = local_now()
-    backtest_start, _backtest_end = backtest_period(generated_at)
-    history_start = backtest_start - timedelta(weeks=HISTORY_WEEKS + 2)
-    occurrences = fetch_all(
-        """
-        SELECT o.ocorrida_em, o.gravidade,
-               CAST(l.latitude AS DOUBLE) AS latitude,
-               CAST(l.longitude AS DOUBLE) AS longitude
-        FROM ocorrencias o
-        JOIN localizacoes l ON l.id_localizacao = o.id_localizacao
-        WHERE o.status <> 'cancelada'
-          AND o.ocorrida_em >= %s
-          AND o.ocorrida_em < %s
-        ORDER BY o.ocorrida_em
-        """,
-        (history_start, generated_at),
-    )
-    mapped_occurrences, unmatched_count = assign_occurrences_to_prediction_areas(occurrences)
+    mapped_occurrences, unmatched_count = fetch_forecast_occurrences(generated_at)
     result = build_occurrence_forecast(
         prediction_areas(),
         mapped_occurrences,
         generated_at,
         prediction_area_neighbors(),
+        include_evaluation=False,
     )
     result["ocorrencias_fora_malha"] = unmatched_count
     return result
+
+
+@app.get("/api/previsoes/ocorrencias/avaliacao")
+def forecast_ocorrencias_avaliacao():
+    generated_at = local_now()
+    mapped_occurrences, _unmatched_count = fetch_forecast_occurrences(generated_at)
+    cache_key = forecast_evaluation_cache_key(mapped_occurrences, generated_at)
+    with forecast_evaluation_cache_lock:
+        if cache_key in forecast_evaluation_cache:
+            forecast_evaluation_cache.move_to_end(cache_key)
+            return forecast_evaluation_cache[cache_key]
+
+        evaluation = build_occurrence_evaluation(
+            prediction_areas(),
+            mapped_occurrences,
+            generated_at,
+            prediction_area_neighbors(),
+        )
+        forecast_evaluation_cache[cache_key] = evaluation
+        while len(forecast_evaluation_cache) > FORECAST_EVALUATION_CACHE_LIMIT:
+            forecast_evaluation_cache.popitem(last=False)
+        return evaluation
 
 
 @app.get("/api/setores-censitarios")

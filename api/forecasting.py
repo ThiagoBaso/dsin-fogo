@@ -289,11 +289,33 @@ def _score_backtest(
     }
 
 
+def build_occurrence_evaluation(
+    areas: list[dict],
+    occurrences: list[dict],
+    generated_at: datetime | None = None,
+    neighbors: dict[int, list[int]] | None = None,
+) -> dict | None:
+    generated_at = generated_at or local_now()
+    area_ids = sorted(int(area["id"]) for area in areas)
+    if not area_ids or not occurrences:
+        return None
+
+    indexed = _index_occurrences(area_ids, occurrences)
+    history_start = min(
+        (timestamps[0] for timestamps, _ in indexed.values() if timestamps),
+        default=None,
+    )
+    if history_start is None:
+        return None
+    return _score_backtest(area_ids, indexed, neighbors or {}, generated_at, history_start)
+
+
 def build_occurrence_forecast(
     areas: list[dict],
     occurrences: list[dict],
     generated_at: datetime | None = None,
     neighbors: dict[int, list[int]] | None = None,
+    include_evaluation: bool = True,
 ) -> dict:
     generated_at = generated_at or local_now()
     area_by_id = {int(area["id"]): str(area["nome"]) for area in areas}
@@ -402,5 +424,6 @@ def build_occurrence_forecast(
             "intervalos": intervals,
         })
 
-    result["avaliacao"] = _score_backtest(area_ids, indexed, neighbors, generated_at, history_start)
+    if include_evaluation:
+        result["avaliacao"] = _score_backtest(area_ids, indexed, neighbors, generated_at, history_start)
     return result

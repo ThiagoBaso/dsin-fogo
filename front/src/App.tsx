@@ -19,6 +19,7 @@ import {
   Aba,
   Agente,
   AgentFilterState,
+  AvaliacaoPrevisaoOcorrencia,
   AttributeFilterOption,
   AttributeFilterState,
   LocationFilters,
@@ -124,6 +125,8 @@ function App() {
   const [previsaoOcorrencias, setPrevisaoOcorrencias] = useState<PrevisaoOcorrencias | null>(null);
   const [carregandoPrevisao, setCarregandoPrevisao] = useState(false);
   const [erroPrevisao, setErroPrevisao] = useState('');
+  const [carregandoAvaliacaoPrevisao, setCarregandoAvaliacaoPrevisao] = useState(false);
+  const [erroAvaliacaoPrevisao, setErroAvaliacaoPrevisao] = useState('');
   const [metricaPrevisao, setMetricaPrevisao] = useState<'quantidade' | 'probabilidade'>('quantidade');
   const [areaPrevisaoSelecionadaId, setAreaPrevisaoSelecionadaId] = useState<number | null>(null);
   const [tiposOcorrenciaSelecionados, setTiposOcorrenciaSelecionados] = useState<string[] | null>(null);
@@ -663,13 +666,17 @@ function App() {
   useEffect(() => {
     if (!previsaoAtiva) {
       setCarregandoPrevisao(false);
+      setCarregandoAvaliacaoPrevisao(false);
       setErroPrevisao('');
+      setErroAvaliacaoPrevisao('');
       return undefined;
     }
 
     const controller = new AbortController();
     setCarregandoPrevisao(true);
+    setCarregandoAvaliacaoPrevisao(false);
     setErroPrevisao('');
+    setErroAvaliacaoPrevisao('');
     fetch(`${process.env.REACT_APP_API_URL || ''}/api/previsoes/ocorrencias`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`API respondeu ${response.status}`);
@@ -678,6 +685,7 @@ function App() {
       .then((dados) => {
         if (controller.signal.aborted) return;
         setPrevisaoOcorrencias(dados);
+        setCarregandoPrevisao(false);
         if (dados.areas.length > 0) {
           setAreaPrevisaoSelecionadaId((atual) => (
             atual !== null && dados.areas.some((area) => area.id === atual)
@@ -685,6 +693,27 @@ function App() {
               : [...dados.areas].sort((left, right) => right.probabilidade_grave_24h - left.probabilidade_grave_24h)[0].id
           ));
         }
+        if (dados.status !== 'ok' || dados.areas.length === 0) return;
+
+        setCarregandoAvaliacaoPrevisao(true);
+        fetch(`${process.env.REACT_APP_API_URL || ''}/api/previsoes/ocorrencias/avaliacao`, { signal: controller.signal })
+          .then((response) => {
+            if (!response.ok) throw new Error(`API respondeu ${response.status}`);
+            return response.json() as Promise<AvaliacaoPrevisaoOcorrencia | null>;
+          })
+          .then((avaliacao) => {
+            if (!controller.signal.aborted) {
+              setPrevisaoOcorrencias((atual) => atual ? { ...atual, avaliacao } : atual);
+            }
+          })
+          .catch((error: Error) => {
+            if (!controller.signal.aborted && error.name !== 'AbortError') {
+              setErroAvaliacaoPrevisao('NÃ£o foi possÃ­vel carregar a validaÃ§Ã£o retrospectiva.');
+            }
+          })
+          .finally(() => {
+            if (!controller.signal.aborted) setCarregandoAvaliacaoPrevisao(false);
+          });
       })
       .catch((error: Error) => {
         if (!controller.signal.aborted && error.name !== 'AbortError') {
@@ -1168,6 +1197,8 @@ function App() {
             onSelectArea={setAreaPrevisaoSelecionadaId}
             loading={carregandoCamadaPrevisao}
             error={erroCamadaPrevisao}
+            loadingEvaluation={carregandoAvaliacaoPrevisao}
+            evaluationError={erroAvaliacaoPrevisao}
           />
         )}
         {mostrarTendenciasMapa && (
