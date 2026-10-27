@@ -1,0 +1,438 @@
+.registration-overlay {
+  position: fixed;
+  z-index: 4000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: rgb(8 15 18 / 58%);
+  overscroll-behavior: contain;
+}
+
+.registration-dialog {
+  width: min(920px, 100%);
+  max-height: min(94vh, 980px);
+  overflow: auto;
+  border: 1px solid var(--dsin-border);
+  border-radius: 14px;
+  background: var(--dsin-surface);
+  color: var(--dsin-text);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 28%);
+}
+
+.registration-header {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--dsin-border);
+  background: var(--dsin-surface);
+}
+
+.registration-header h2,
+.registration-header p,
+.registration-section h3,
+.registration-section p,
+.registration-success h3,
+.registration-success p {
+  margin: 0;
+}
+
+.registration-eyebrow {
+  margin-bottom: 4px !important;
+  color: var(--dsin-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.registration-header h2 {
+  color: var(--dsin-ink);
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.registration-close {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--dsin-border);
+  border-radius: 9px;
+  background: var(--dsin-surface-subtle);
+  color: var(--dsin-ink);
+  cursor: pointer;
+}
+
+.registration-close svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.registration-close:hover:not(:disabled),
+.registration-secondary:hover:not(:disabled) {
+  border-color: var(--dsin-border-strong);
+  background: var(--dsin-hover);
+}
+
+.registration-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 16px 24px 0;
+  border-bottom: 1px solid var(--dsin-border);
+}
+
+.registration-tabs button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--dsin-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.registration-tabs button:hover {
+  color: var(--dsin-ink);
+}
+
+.registration-tabs button.is-active {
+  border-bottom-color: var(--dsin-yellow);
+  color: var(--dsin-ink);
+}
+
+.registration-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 24px 24px;
+}
+
+.registration-section {
+  padding: 18px;
+  border: 1px solid var(--dsin-border);
+  border-radius: 11px;
+  background: var(--dsin-card-muted);
+}
+
+.registration-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.registration-section-heading h3 {
+  color: var(--dsin-ink);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.registration-section-heading p {
+  margin-top: 4px;
+  color: var(--dsin-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.registration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.registration-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--dsin-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.registration-field > span b {
+  color: var(--dsin-danger-ink);
+}
+
+.registration-field input,
+.registration-field select,
+.registration-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsin-border-strong);
+  border-radius: 8px;
+  outline: none;
+  background: var(--dsin-page);
+  color: var(--dsin-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.registration-field textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.registration-field input:focus-visible,
+.registration-field select:focus-visible,
+.registration-field textarea:focus-visible,
+.registration-tabs button:focus-visible,
+.registration-close:focus-visible,
+.registration-actions button:focus-visible,
+.registration-checkbox input:focus-visible {
+  outline: 3px solid var(--dsin-focus);
+  outline-offset: 2px;
+}
+
+.registration-field input:disabled {
+  background: var(--dsin-surface-subtle);
+  color: var(--dsin-muted);
+}
+
+.registration-field-wide {
+  grid-column: 1 / -1;
+}
+
+.registration-checkbox {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  color: var(--dsin-ink);
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.registration-checkbox input {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: var(--dsin-yellow);
+}
+
+.registration-section-toggle {
+  align-items: flex-start;
+}
+
+.registration-section-toggle span {
+  display: grid;
+  gap: 3px;
+}
+
+.registration-section-toggle small {
+  color: var(--dsin-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.registration-subsection {
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dsin-border);
+}
+
+.registration-map {
+  height: 250px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid var(--dsin-border);
+  border-radius: 9px;
+  background: var(--dsin-surface-subtle);
+}
+
+.registration-location-fields {
+  gap: 12px 14px;
+}
+
+.registration-message {
+  margin: 16px 24px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--dsin-warning-bg);
+  color: var(--dsin-warning-ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.registration-message.is-error {
+  background: var(--dsin-danger-bg);
+  color: var(--dsin-danger-ink);
+}
+
+.registration-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.registration-actions button,
+.registration-success button {
+  min-height: 44px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.registration-secondary {
+  border-color: var(--dsin-border-strong) !important;
+  background: var(--dsin-surface);
+  color: var(--dsin-ink);
+}
+
+.registration-primary {
+  border-color: var(--dsin-yellow-hover) !important;
+  background: var(--dsin-yellow);
+  color: var(--dsin-on-yellow);
+}
+
+.registration-primary:hover:not(:disabled) {
+  background: var(--dsin-yellow-hover);
+}
+
+.registration-actions button:disabled,
+.registration-close:disabled {
+  cursor: wait;
+  opacity: .7;
+}
+
+.registration-success {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 54px 28px 60px;
+  text-align: center;
+}
+
+.registration-success-icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--status-operational-bg);
+  color: var(--status-operational-text);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.registration-success h3 {
+  color: var(--dsin-ink);
+  font-size: 18px;
+}
+
+.registration-success p {
+  max-width: 500px;
+  color: var(--dsin-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.registration-success button {
+  margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .registration-overlay {
+    align-items: end;
+    padding: 0;
+  }
+
+  .registration-dialog {
+    width: 100%;
+    max-height: 96dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .registration-header {
+    padding: 15px 16px;
+  }
+
+  .registration-header h2 {
+    font-size: 18px;
+  }
+
+  .registration-tabs {
+    gap: 0;
+    padding: 10px 12px 0;
+  }
+
+  .registration-tabs button {
+    flex: 1 1 0;
+    padding: 8px 4px;
+    font-size: 12px;
+  }
+
+  .registration-form {
+    gap: 12px;
+    padding: 12px 12px 20px;
+  }
+
+  .registration-section {
+    padding: 14px 12px;
+  }
+
+  .registration-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .registration-field-wide {
+    grid-column: auto;
+  }
+
+  .registration-map {
+    height: 220px;
+  }
+
+  .registration-message {
+    margin: 12px;
+  }
+
+  .registration-actions {
+    position: sticky;
+    z-index: 10;
+    bottom: -20px;
+    margin: 0 -12px -20px;
+    padding: 12px;
+    border-top: 1px solid var(--dsin-border);
+    background: var(--dsin-surface);
+  }
+
+  .registration-actions button {
+    flex: 1 1 0;
+  }
+
+  .registration-success {
+    padding: 38px 20px 44px;
+  }
+}

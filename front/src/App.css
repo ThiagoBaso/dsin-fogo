@@ -2065,6 +2065,43 @@
   color: var(--dsin-ink);
 }
 
+.map-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-bar button.map-bar-create {
+  min-width: 44px;
+  border: 1px solid var(--dsin-yellow-border);
+  background: var(--dsin-yellow);
+  color: var(--dsin-on-yellow);
+}
+
+.map-bar button.map-bar-create:hover {
+  border-color: var(--dsin-yellow-hover);
+  background: var(--dsin-yellow-hover);
+  color: var(--dsin-on-yellow);
+}
+
+.map-bar button.map-bar-create svg {
+  width: 19px;
+  height: 19px;
+}
+
+.map-bar.is-compact .map-bar-actions button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  gap: 0;
+  padding: 0;
+}
+
+.map-bar.is-compact .map-bar-actions button span {
+  display: none;
+}
+
 .api-message {
   flex-shrink: 0;
   margin: 0;
@@ -2619,7 +2656,7 @@
     gap: 0;
   }
 
-  .map-bar button span {
+  .map-bar-switch button span {
     display: none;
   }
 
@@ -2627,6 +2664,17 @@
     align-self: flex-end;
     width: auto;
     min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 auto;
+  }
+
+  .map-bar-actions {
+    align-self: flex-end;
+  }
+
+  .map-bar button.map-bar-create {
+    align-self: auto;
+    width: auto;
     min-height: 44px;
     flex: 0 0 auto;
   }

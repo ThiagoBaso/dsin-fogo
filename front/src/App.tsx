@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Map from './components/Map';
 import TopBarMap from './components/TopBarMap';
+import RecordRegistrationDialog, { type CreatedRecord } from './components/RecordRegistrationDialog';
 import ItemList from './components/ItemList';
 import AgentList from './components/AgentList';
 import AgentDetails from './components/AgentDetails';
@@ -102,6 +103,8 @@ function getNumeroSerie(ponto: Ponto) {
 function App() {
   const [abaAtiva, setAbaAtiva] = useState<Aba>('mapa');
   const [tema, setTema] = useState<'light' | 'dark'>(getStoredTheme);
+  const [cadastroAberto, setCadastroAberto] = useState(false);
+  const [refreshCadastro, setRefreshCadastro] = useState(0);
   const [buscaSerieMapa, setBuscaSerieMapa] = useState('');
   const [buscaEquipamentos, setBuscaEquipamentos] = useState('');
   const [buscaAgentes, setBuscaAgentes] = useState('');
@@ -183,6 +186,7 @@ function App() {
   const [painelExpandido, setPainelExpandido] = useState(true);
   const painelDetalhes = useRef<HTMLElement>(null);
   const scrollDetalhesPendente = useRef<number | null>(null);
+  const cadastroPendente = useRef<CreatedRecord | null>(null);
   const restaurarScrollDetalhes = useCallback(() => {
     const scrollTop = scrollDetalhesPendente.current;
     const painel = painelDetalhes.current;
@@ -190,6 +194,11 @@ function App() {
     painel.scrollTop = scrollTop;
     scrollDetalhesPendente.current = null;
   }, []);
+
+  function handleCadastroCriado(record: CreatedRecord) {
+    cadastroPendente.current = record;
+    setRefreshCadastro((current) => current + 1);
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = tema;
@@ -538,6 +547,16 @@ function App() {
       .then((dados) => {
         setPontos(dados);
         setDetalhesId((idAtual) => idAtual !== null && dados.some((ponto) => ponto.id === idAtual) ? idAtual : null);
+        const pending = cadastroPendente.current;
+        if (pending?.kind === 'equipamento') {
+          if (dados.some((ponto) => ponto.id === pending.id)) {
+            setAbaAtiva('lista');
+            setDetalhesAgenteId(null);
+            setOcorrenciaDetalhes(null);
+            setDetalhesId(pending.id);
+          }
+          cadastroPendente.current = null;
+        }
       })
       .catch((error: Error) => {
         if (error.name !== 'AbortError') setErro('Não foi possível carregar os equipamentos da API.');
@@ -547,7 +566,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [dataHoraAplicada]);
+  }, [dataHoraAplicada, refreshCadastro]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -568,6 +587,20 @@ function App() {
         if (!controller.signal.aborted) {
           setOcorrencias(dados);
           setCarregandoOcorrencias(false);
+          const pending = cadastroPendente.current;
+          if (pending?.kind === 'ocorrencia') {
+            const occurrence = dados.find((item) => item.id === pending.id);
+            const matchesAppliedFilters = occurrence
+              && (tiposOcorrenciaAplicados === null || tiposOcorrenciaAplicados.includes(occurrence.tipo))
+              && (gravidadesOcorrenciaAplicadas === null || gravidadesOcorrenciaAplicadas.includes(occurrence.gravidade));
+            if (occurrence && matchesAppliedFilters) {
+              setAbaAtiva('mapa');
+              setDetalhesId(null);
+              setDetalhesAgenteId(null);
+              setOcorrenciaDetalhes(occurrence);
+            }
+            cadastroPendente.current = null;
+          }
         }
       })
       .catch((error: Error) => {
@@ -579,7 +612,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [periodoOcorrenciasAplicado]);
+  }, [periodoOcorrenciasAplicado, refreshCadastro, tiposOcorrenciaAplicados, gravidadesOcorrenciaAplicadas]);
 
   useEffect(() => {
     if (!mapaCalorOcorrencias) {
@@ -616,7 +649,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [mapaCalorOcorrencias, periodoOcorrenciasAplicado]);
+  }, [mapaCalorOcorrencias, periodoOcorrenciasAplicado, refreshCadastro]);
 
   useEffect(() => {
     if (!exibirContornoBairros) return undefined;
@@ -726,7 +759,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [previsaoAtiva]);
+  }, [previsaoAtiva, refreshCadastro]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -743,6 +776,16 @@ function App() {
       .then((dados) => {
         setAgentes(dados);
         setDetalhesAgenteId((idAtual) => idAtual !== null && dados.some((agente) => agente.id === idAtual) ? idAtual : null);
+        const pending = cadastroPendente.current;
+        if (pending?.kind === 'agente') {
+          if (dados.some((agente) => agente.id === pending.id)) {
+            setAbaAtiva('agentes');
+            setDetalhesId(null);
+            setOcorrenciaDetalhes(null);
+            setDetalhesAgenteId(pending.id);
+          }
+          cadastroPendente.current = null;
+        }
       })
       .catch((error: Error) => {
         if (error.name !== 'AbortError') {
@@ -752,7 +795,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [dataHoraAplicada]);
+  }, [dataHoraAplicada, refreshCadastro]);
 
   useEffect(() => {
     const idsMoveisSelecionados = selecionadosIds.filter((id) =>
@@ -871,6 +914,7 @@ function App() {
           onChange={setAbaAtiva}
           tema={tema}
           onToggleTema={() => setTema((atual) => atual === 'dark' ? 'light' : 'dark')}
+          onCreate={() => setCadastroAberto(true)}
           busca={abaAtiva === 'mapa'
             ? buscaSerieMapa
             : abaAtiva === 'lista'
@@ -1233,6 +1277,12 @@ function App() {
                 />
               : null}
       </aside>
+      {cadastroAberto && <RecordRegistrationDialog
+          open={cadastroAberto}
+          dark={tema === 'dark'}
+          onClose={() => setCadastroAberto(false)}
+          onCreated={handleCadastroCriado}
+        />}
     </div>
   );
 }

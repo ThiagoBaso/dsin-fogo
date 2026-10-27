@@ -2,16 +2,20 @@
 from __future__ import annotations
 
 import os
+import math
+import re
 from collections import OrderedDict
 from contextlib import closing
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from threading import Lock
+from typing import Literal
 
 import mysql.connector
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from forecasting import (
     HISTORY_WEEKS,
     backtest_period,
@@ -27,6 +31,139 @@ from geography import (
     prediction_areas,
 )
 
+
+class CadastroLocalizacao(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    bairro_id: int = Field(gt=0)
+    cep: str | None = Field(default=None, max_length=9)
+    cidade: str = Field(min_length=1, max_length=100)
+    uf: str = Field(min_length=2, max_length=2)
+    logradouro: str | None = Field(default=None, max_length=180)
+    referencia: str | None = Field(default=None, max_length=255)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+    @field_validator("cep")
+    @classmethod
+    def normalize_cep(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        digits = re.sub(r"\D", "", value)
+        if len(digits) != 8:
+            raise ValueError("O CEP deve ter oito dígitos.")
+        return digits
+
+    @field_validator("uf")
+    @classmethod
+    def normalize_uf(cls, value: str) -> str:
+        return value.upper()
+
+
+class AtributoCadastroEquipamento(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id_atributo: int = Field(gt=0)
+    valor_texto: str | None = None
+    valor_numero: float | None = None
+    valor_booleano: bool | None = None
+
+
+class ManutencaoCadastroEquipamento(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    modalidade: Literal["preventiva", "corretiva"]
+    prioridade: Literal["imediata", "agendada"]
+    status: Literal["pendente", "agendada"]
+    descricao: str | None = Field(default=None, max_length=5000)
+    prevista_para: datetime | None = None
+
+    @field_validator("prevista_para")
+    @classmethod
+    def normalize_scheduled_at(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(timezone(timedelta(hours=-3))).replace(tzinfo=None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        if self.prioridade == "agendada" and self.prevista_para is None:
+            raise ValueError("Informe quando a manutenção agendada deve ocorrer.")
+        if self.prioridade == "imediata" and self.status == "agendada":
+            raise ValueError("Uma manutenção imediata não pode estar apenas agendada.")
+        return self
+
+
+class EquipamentoCadastro(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    tipo_id: int = Field(gt=0)
+    orgao_id: int = Field(gt=0)
+    situacao_id: int = Field(gt=0)
+    numero_serie: str = Field(min_length=1, max_length=120)
+    marca: str = Field(min_length=1, max_length=100)
+    modelo: str = Field(min_length=1, max_length=100)
+    instalado_em: datetime | None = None
+    localizacao: CadastroLocalizacao
+    atributos: list[AtributoCadastroEquipamento] = Field(default_factory=list)
+    manutencao: ManutencaoCadastroEquipamento | None = None
+
+    @field_validator("instalado_em")
+    @classmethod
+    def normalize_installed_at(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(timezone(timedelta(hours=-3))).replace(tzinfo=None)
+        return value
+
+
+class AgenteCadastro(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    orgao_id: int = Field(gt=0)
+    matricula: str = Field(min_length=1, max_length=60)
+    nome: str = Field(min_length=1, max_length=150)
+    cargo: str = Field(min_length=1, max_length=100)
+    raio_atuacao_km: float = Field(ge=0.01, le=25)
+    ativo_cadastro: bool = True
+    localizacao: CadastroLocalizacao
+
+
+class OcorrenciaCadastro(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    orgao_id: int = Field(gt=0)
+    equipamento_id: int | None = Field(default=None, gt=0)
+    tipo: str = Field(min_length=1, max_length=100)
+    gravidade: Literal["baixa", "media", "alta", "critica"]
+    status: Literal["aberta", "em_atendimento", "resolvida", "cancelada"] = "aberta"
+    descricao: str | None = Field(default=None, max_length=10000)
+    ocorrida_em: datetime
+    resolvida_em: datetime | None = None
+    localizacao: CadastroLocalizacao
+
+    @field_validator("ocorrida_em", "resolvida_em")
+    @classmethod
+    def normalize_datetime(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(timezone(timedelta(hours=-3))).replace(tzinfo=None)
+        return value
+
+    @model_validator(mode="after")
+    def validate_resolution(self):
+        if self.ocorrida_em > datetime.now(timezone(timedelta(hours=-3))).replace(tzinfo=None):
+            raise ValueError("A data da ocorrência não pode estar no futuro.")
+        if self.status == "resolvida" and self.resolvida_em is None:
+            raise ValueError("Informe a data de resolução para uma ocorrência resolvida.")
+        if self.status != "resolvida" and self.resolvida_em is not None:
+            raise ValueError("Só ocorrências resolvidas podem ter data de resolução.")
+        if self.resolvida_em is not None:
+            if self.resolvida_em < self.ocorrida_em:
+                raise ValueError("A resolução deve ocorrer depois da abertura da ocorrência.")
+            if self.resolvida_em > datetime.now(timezone(timedelta(hours=-3))).replace(tzinfo=None):
+                raise ValueError("A data de resolução não pode estar no futuro.")
+        return self
+
+
 app = FastAPI(title="F.O.G.O. API", version="1.0.0")
 FORECAST_EVALUATION_CACHE_LIMIT = 2
 forecast_evaluation_cache: OrderedDict[str, dict | None] = OrderedDict()
@@ -35,7 +172,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:8081,http://localhost:3000").split(","),
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -115,6 +252,136 @@ def forecast_evaluation_cache_key(occurrences: list[dict], generated_at: datetim
     return digest.hexdigest()
 
 
+def insert_localizacao(cursor, localizacao: CadastroLocalizacao) -> int:
+    cursor.execute("SELECT 1 FROM bairros WHERE id_bairro = %s", (localizacao.bairro_id,))
+    if cursor.fetchone() is None:
+        raise HTTPException(status_code=422, detail="Selecione um bairro válido.")
+    cursor.execute(
+        """
+        INSERT INTO localizacoes
+            (id_bairro, cep, cidade, uf, logradouro, referencia, latitude, longitude)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            localizacao.bairro_id,
+            localizacao.cep,
+            localizacao.cidade,
+            localizacao.uf,
+            localizacao.logradouro or None,
+            localizacao.referencia or None,
+            localizacao.latitude,
+            localizacao.longitude,
+        ),
+    )
+    return int(cursor.lastrowid)
+
+
+def run_create_transaction(operation, duplicate_detail: str):
+    db = None
+    cursor = None
+    try:
+        db = connect()
+        cursor = db.cursor(dictionary=True)
+        db.start_transaction()
+        result = operation(cursor)
+        db.commit()
+        return result
+    except HTTPException:
+        if db is not None:
+            db.rollback()
+        raise
+    except mysql.connector.IntegrityError as exc:
+        if db is not None:
+            db.rollback()
+        if exc.errno == 1062:
+            raise HTTPException(status_code=409, detail=duplicate_detail) from exc
+        if exc.errno == 1452:
+            raise HTTPException(status_code=422, detail="Uma das referências selecionadas não existe.") from exc
+        raise HTTPException(status_code=409, detail="Os dados não atendem às regras do cadastro.") from exc
+    except mysql.connector.Error as exc:
+        if db is not None:
+            db.rollback()
+        raise HTTPException(status_code=503, detail="Não foi possível gravar o cadastro no banco de dados.") from exc
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if db is not None:
+            db.close()
+
+
+def insert_atributos_equipamento(
+    cursor,
+    equipamento_id: int,
+    tipo_id: int,
+    submitted_attributes: list[AtributoCadastroEquipamento],
+) -> None:
+    cursor.execute(
+        """
+        SELECT id_atributo, nome, tipo_valor, obrigatorio
+        FROM atributos_tipo
+        WHERE id_tipo = %s
+        ORDER BY id_atributo
+        """,
+        (tipo_id,),
+    )
+    definitions = cursor.fetchall()
+    if not definitions:
+        cursor.execute("SELECT 1 FROM tipos_equipamento WHERE id_tipo = %s", (tipo_id,))
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=422, detail="Selecione um tipo de equipamento válido.")
+
+    submitted_by_id: dict[int, AtributoCadastroEquipamento] = {}
+    for submitted in submitted_attributes:
+        if submitted.id_atributo in submitted_by_id:
+            raise HTTPException(status_code=422, detail="Um atributo foi informado mais de uma vez.")
+        submitted_by_id[submitted.id_atributo] = submitted
+
+    definition_by_id = {int(definition["id_atributo"]): definition for definition in definitions}
+    unknown_ids = set(submitted_by_id) - set(definition_by_id)
+    if unknown_ids:
+        raise HTTPException(status_code=422, detail="Há atributos que não pertencem ao tipo de equipamento selecionado.")
+
+    for definition in definitions:
+        attribute_id = int(definition["id_atributo"])
+        submitted = submitted_by_id.get(attribute_id)
+        if submitted is None:
+            if definition["obrigatorio"]:
+                raise HTTPException(status_code=422, detail=f"Preencha o atributo obrigatório {definition['nome']}.")
+            continue
+
+        values = {
+            "texto": submitted.valor_texto.strip() if submitted.valor_texto is not None else None,
+            "numero": submitted.valor_numero,
+            "booleano": submitted.valor_booleano,
+        }
+        values = {key: value for key, value in values.items() if value is not None and value != ""}
+        expected_type = definition["tipo_valor"]
+        if len(values) != 1 or expected_type not in values:
+            raise HTTPException(status_code=422, detail=f"O valor do atributo {definition['nome']} tem formato inválido.")
+        value = values[expected_type]
+        if expected_type == "texto" and len(value) > 255:
+            raise HTTPException(status_code=422, detail=f"O atributo {definition['nome']} excede o limite de texto.")
+        if expected_type == "numero" and not math.isfinite(value):
+            raise HTTPException(status_code=422, detail=f"O atributo {definition['nome']} precisa ser um número válido.")
+        if definition["nome"] == "raio_cobertura_km" and not 0.01 <= value <= 100:
+            raise HTTPException(status_code=422, detail="O raio de cobertura deve estar entre 0,01 e 100 km.")
+
+        cursor.execute(
+            """
+            INSERT INTO valores_atributo
+                (id_equipamento, id_atributo, valor_texto, valor_numero, valor_booleano)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                equipamento_id,
+                attribute_id,
+                value if expected_type == "texto" else None,
+                value if expected_type == "numero" else None,
+                value if expected_type == "booleano" else None,
+            ),
+        )
+
+
 def attach_equipment_attributes(equipment_rows: list[dict]):
     if not equipment_rows:
         return equipment_rows
@@ -165,6 +432,198 @@ def applicable_equipment_attributes(equipment_type_id: int, attributes: list[dic
 def health():
     rows = fetch_all("SELECT 1 AS ok")
     return {"status": "ok", "database": bool(rows and rows[0]["ok"] == 1)}
+
+
+@app.get("/api/cadastros/opcoes")
+def list_cadastro_opcoes():
+    organizations = fetch_all(
+        "SELECT id_orgao AS id, nome, sigla FROM orgaos ORDER BY nome"
+    )
+    equipment_types = fetch_all(
+        "SELECT id_tipo AS id, nome, mobilidade FROM tipos_equipamento ORDER BY nome"
+    )
+    equipment_situations = fetch_all(
+        "SELECT id_situacao AS id, nome, disponivel FROM situacoes_equipamento ORDER BY id_situacao"
+    )
+    equipment_attributes = fetch_all(
+        """
+        SELECT id_atributo AS id, id_tipo AS tipo_id, nome, tipo_valor, unidade, obrigatorio
+        FROM atributos_tipo
+        ORDER BY id_tipo, id_atributo
+        """
+    )
+    neighborhoods = fetch_all(
+        """
+        SELECT b.id_bairro AS id, b.nome, r.nome AS regiao
+        FROM bairros b
+        JOIN regioes r ON r.id_regiao = b.id_regiao
+        ORDER BY r.nome, b.nome
+        """
+    )
+    equipment = fetch_all(
+        """
+        SELECT e.id_equipamento AS id, e.id_orgao AS orgao_id,
+               e.numero_serie, e.modelo, t.nome AS tipo
+        FROM equipamentos e
+        JOIN tipos_equipamento t ON t.id_tipo = e.id_tipo
+        ORDER BY e.numero_serie
+        """
+    )
+    occurrence_types = fetch_all(
+        "SELECT DISTINCT tipo FROM ocorrencias WHERE tipo <> '' ORDER BY tipo"
+    )
+    default_location = fetch_all(
+        """
+        SELECT cidade, uf
+        FROM localizacoes
+        GROUP BY cidade, uf
+        ORDER BY COUNT(*) DESC, cidade, uf
+        LIMIT 1
+        """
+    )
+    for situation in equipment_situations:
+        situation["disponivel"] = bool(situation["disponivel"])
+    for attribute in equipment_attributes:
+        attribute["obrigatorio"] = bool(attribute["obrigatorio"])
+    return {
+        "orgaos": organizations,
+        "tipos_equipamento": equipment_types,
+        "situacoes_equipamento": equipment_situations,
+        "atributos_equipamento": equipment_attributes,
+        "bairros": neighborhoods,
+        "equipamentos": equipment,
+        "tipos_ocorrencia": [row["tipo"] for row in occurrence_types],
+        "localizacao_padrao": default_location[0] if default_location else {"cidade": "Marília", "uf": "SP"},
+    }
+
+
+@app.post("/api/equipamentos", status_code=201)
+def create_equipamento(payload: EquipamentoCadastro):
+    def insert(cursor):
+        cursor.execute(
+            "SELECT nome FROM situacoes_equipamento WHERE id_situacao = %s",
+            (payload.situacao_id,),
+        )
+        situation = cursor.fetchone()
+        if situation is None:
+            raise HTTPException(status_code=422, detail="Selecione uma situação válida.")
+        if situation["nome"].strip().casefold() == "ainda não instalado" and payload.instalado_em is not None:
+            raise HTTPException(status_code=422, detail="Um equipamento ainda não instalado não pode ter data de instalação.")
+        if payload.instalado_em is not None and payload.instalado_em > local_now():
+            raise HTTPException(status_code=422, detail="A data de instalação não pode estar no futuro.")
+
+        location_id = insert_localizacao(cursor, payload.localizacao)
+        created_at = local_now()
+        cursor.execute(
+            """
+            INSERT INTO equipamentos
+                (id_tipo, id_orgao, id_localizacao, id_situacao, numero_serie, marca, modelo, cadastrado_em, instalado_em)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                payload.tipo_id,
+                payload.orgao_id,
+                location_id,
+                payload.situacao_id,
+                payload.numero_serie,
+                payload.marca,
+                payload.modelo,
+                created_at,
+                payload.instalado_em,
+            ),
+        )
+        equipment_id = int(cursor.lastrowid)
+        cursor.execute(
+            """
+            INSERT INTO historico_situacoes
+                (id_equipamento, id_situacao, iniciado_em, encerrado_em, observacao)
+            VALUES (%s, %s, %s, NULL, %s)
+            """,
+            (equipment_id, payload.situacao_id, created_at, "Situação informada no cadastro."),
+        )
+        insert_atributos_equipamento(cursor, equipment_id, payload.tipo_id, payload.atributos)
+
+        if payload.manutencao is not None:
+            if payload.manutencao.prevista_para is not None and payload.manutencao.prevista_para <= created_at:
+                raise HTTPException(status_code=422, detail="A manutenção agendada deve ter uma data futura.")
+            cursor.execute(
+                """
+                INSERT INTO manutencoes
+                    (id_equipamento, modalidade, prioridade, status, descricao, aberta_em, prevista_para)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    equipment_id,
+                    payload.manutencao.modalidade,
+                    payload.manutencao.prioridade,
+                    payload.manutencao.status,
+                    payload.manutencao.descricao or None,
+                    created_at,
+                    payload.manutencao.prevista_para,
+                ),
+            )
+        return {"id": equipment_id}
+
+    return run_create_transaction(insert, "Já existe um equipamento com esse número de série.")
+
+
+@app.post("/api/agentes", status_code=201)
+def create_agente(payload: AgenteCadastro):
+    def insert(cursor):
+        location_id = insert_localizacao(cursor, payload.localizacao)
+        cursor.execute(
+            """
+            INSERT INTO agentes
+                (id_orgao, id_localizacao_base, matricula, nome, cargo, ativo_cadastro, raio_atuacao_km)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                payload.orgao_id,
+                location_id,
+                payload.matricula,
+                payload.nome,
+                payload.cargo,
+                payload.ativo_cadastro,
+                payload.raio_atuacao_km,
+            ),
+        )
+        return {"id": int(cursor.lastrowid)}
+
+    return run_create_transaction(insert, "Já existe um agente com essa matrícula neste órgão.")
+
+
+@app.post("/api/ocorrencias", status_code=201)
+def create_ocorrencia(payload: OcorrenciaCadastro):
+    def insert(cursor):
+        if payload.equipamento_id is not None:
+            cursor.execute(
+                "SELECT 1 FROM equipamentos WHERE id_equipamento = %s AND id_orgao = %s",
+                (payload.equipamento_id, payload.orgao_id),
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=422, detail="O equipamento deve pertencer ao Ã³rgÃ£o selecionado.")
+        location_id = insert_localizacao(cursor, payload.localizacao)
+        cursor.execute(
+            """
+            INSERT INTO ocorrencias
+                (id_localizacao, id_orgao, id_equipamento, tipo, gravidade, status, descricao, ocorrida_em, resolvida_em)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                location_id,
+                payload.orgao_id,
+                payload.equipamento_id,
+                payload.tipo,
+                payload.gravidade,
+                payload.status,
+                payload.descricao or None,
+                payload.ocorrida_em,
+                payload.resolvida_em,
+            ),
+        )
+        return {"id": int(cursor.lastrowid)}
+
+    return run_create_transaction(insert, "Não foi possível cadastrar a ocorrência.")
 
 
 @app.get("/api/ocorrencias/analise")

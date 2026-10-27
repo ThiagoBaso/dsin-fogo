@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Aba } from '../types';
 
 interface TopBarMapProps {
@@ -7,9 +8,12 @@ interface TopBarMapProps {
     onBuscaChange: (busca: string) => void;
     tema: 'light' | 'dark';
     onToggleTema: () => void;
+    onCreate: () => void;
 }
 
-function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange, tema, onToggleTema }: TopBarMapProps) {
+function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange, tema, onToggleTema, onCreate }: TopBarMapProps) {
+    const searchRef = useRef<HTMLLabelElement>(null);
+    const [compactActions, setCompactActions] = useState(false);
     const isMapa = abaAtiva === 'mapa';
     const isLista = abaAtiva === 'lista';
     const searchLabel = isMapa
@@ -23,8 +27,28 @@ function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange, tema, onToggleTem
             ? 'Buscar equipamento'
             : 'Buscar agente';
 
+    useEffect(() => {
+        const search = searchRef.current;
+        if (!search) return undefined;
+
+        const updateDensity = () => {
+            const width = search.getBoundingClientRect().width;
+            setCompactActions((isCompact) => width < (isCompact ? 430 : 280));
+        };
+
+        updateDensity();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', updateDensity);
+            return () => window.removeEventListener('resize', updateDensity);
+        }
+
+        const observer = new ResizeObserver(updateDensity);
+        observer.observe(search);
+        return () => observer.disconnect();
+    }, []);
+
     return (
-        <div className="map-bar">
+        <div className={`map-bar${compactActions ? ' is-compact' : ''}`}>
             <div className="map-bar-switch" role="group" aria-label="Modo de visualização">
                 <button type="button" aria-label="Mapa" aria-pressed={abaAtiva === 'mapa'} onClick={() => onChange('mapa')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -48,7 +72,7 @@ function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange, tema, onToggleTem
                     <span>Agentes</span>
                 </button>
             </div>
-            <label className="map-bar-search">
+            <label className="map-bar-search" ref={searchRef}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <circle cx="11" cy="11" r="7" />
                     <path d="m16 16 4 4" />
@@ -61,26 +85,40 @@ function TopBarMap({ abaAtiva, onChange, busca, onBuscaChange, tema, onToggleTem
                     onChange={(event) => onBuscaChange(event.target.value)}
                 />
             </label>
-            <button
-                type="button"
-                className="theme-toggle"
-                aria-label={`Mudar para o tema ${tema === 'dark' ? 'claro' : 'escuro'}`}
-                aria-pressed={tema === 'dark'}
-                title={`Mudar para o tema ${tema === 'dark' ? 'claro' : 'escuro'}`}
-                onClick={onToggleTema}
-            >
-                {tema === 'dark' ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="4" />
-                        <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+            <div className="map-bar-actions">
+                <button
+                    type="button"
+                    className="map-bar-create"
+                    aria-label="Cadastrar equipamento, agente ou ocorrência"
+                    title="Novo cadastro"
+                    onClick={onCreate}
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14" />
                     </svg>
-                ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M20.9 13A8.5 8.5 0 0 1 11 3.1 8.5 8.5 0 1 0 20.9 13Z" />
-                    </svg>
-                )}
-                <span>{tema === 'dark' ? 'Claro' : 'Escuro'}</span>
-            </button>
+                    <span>Cadastrar</span>
+                </button>
+                <button
+                    type="button"
+                    className="theme-toggle"
+                    aria-label={`Mudar para o tema ${tema === 'dark' ? 'claro' : 'escuro'}`}
+                    aria-pressed={tema === 'dark'}
+                    title={`Mudar para o tema ${tema === 'dark' ? 'claro' : 'escuro'}`}
+                    onClick={onToggleTema}
+                >
+                    {tema === 'dark' ? (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="4" />
+                            <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+                        </svg>
+                    ) : (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20.9 13A8.5 8.5 0 0 1 11 3.1 8.5 8.5 0 1 0 20.9 13Z" />
+                        </svg>
+                    )}
+                    <span>{tema === 'dark' ? 'Claro' : 'Escuro'}</span>
+                </button>
+            </div>
         </div>
     )
 }
